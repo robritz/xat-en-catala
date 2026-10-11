@@ -184,6 +184,19 @@ describe("POST /api/chat", () => {
     expect(replyMetadata(stream)).toBeUndefined();
   });
 
+  test("logs the tokens of each reply as a line of JSON", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    mockModel("Bon dia");
+    await (await postChat(post("/api/chat", { messages }))).text();
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(log.mock.calls[0][0])).toEqual({
+      event: "reply_tokens",
+      inputTokens: 12,
+      outputTokens: 5,
+      translation: false,
+    });
+  });
+
   test("reports a model failure in the stream without leaking the upstream error", async () => {
     mockModel(new Error("RunPod HTTP 500: secret details"));
     const res = await postChat(post("/api/chat", { messages }));

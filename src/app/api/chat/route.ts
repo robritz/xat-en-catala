@@ -28,6 +28,16 @@ export async function POST(request: Request) {
       // A translation may be of a text that ends with a sign-off.
       stopSequences: translation ? undefined : SIGN_OFFS,
       onError: ({ error }) => console.error(error),
+      // One line of JSON per reply, to be found in the logs by its event.
+      onEnd: ({ totalUsage }) =>
+        console.log(
+          JSON.stringify({
+            event: "reply_tokens",
+            inputTokens: totalUsage.inputTokens,
+            outputTokens: totalUsage.outputTokens,
+            translation: translation !== null,
+          }),
+        ),
     });
     return createUIMessageStreamResponse({
       stream: toUIMessageStream({
