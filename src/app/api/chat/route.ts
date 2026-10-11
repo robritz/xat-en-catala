@@ -1,6 +1,7 @@
 import { createUIMessageStreamResponse, streamText, toUIMessageStream } from "ai";
 import { toModelMessages, translationRequest } from "@/lib/chat";
 import { chatModel, SIGN_OFFS, SYSTEM_PROMPT, TRANSLATION_PROMPT } from "@/lib/runpod";
+import type { ReplyUsage } from "@/lib/token-usage";
 import { isUnlocked } from "@/lib/unlock";
 
 // The request stays open while a cold worker starts, which can take minutes.
@@ -33,6 +34,14 @@ export async function POST(request: Request) {
         stream: result.stream,
         // Don't leak upstream details to the browser.
         onError: () => "Upstream error",
+        // Nothing is said of a reply the endpoint didn't count the tokens of.
+        messageMetadata: ({ part }) => {
+          if (part.type !== "finish") return undefined;
+          const { inputTokens, outputTokens } = part.totalUsage;
+          if (inputTokens === undefined || outputTokens === undefined) return undefined;
+          const usage: ReplyUsage = { inputTokens, outputTokens, translation: translation !== null };
+          return { usage };
+        },
       }),
     });
   } catch (err) {

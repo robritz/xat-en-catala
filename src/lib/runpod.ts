@@ -40,6 +40,8 @@ export function chatModel() {
     name: "runpod",
     apiKey,
     baseURL: `https://api.runpod.ai/v2/${endpointId}/openai/v1`,
+    // Without this the endpoint doesn't count the tokens of a streamed reply.
+    includeUsage: true,
   });
   return runpod.chatModel(process.env.RUNPOD_MODEL || DEFAULT_MODEL);
 }

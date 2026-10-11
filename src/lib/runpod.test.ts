@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { generateText } from "ai";
+import { generateText, streamText } from "ai";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { chatModel, SIGN_OFFS, SYSTEM_PROMPT, TRANSLATION_PROMPT } from "./runpod";
 
@@ -33,6 +33,24 @@ describe("chatModel", () => {
   test("uses RUNPOD_MODEL when the endpoint serves the model under another name", async () => {
     vi.stubEnv("RUNPOD_MODEL", "salamandra");
     expect((await sentRequest()).body.model).toBe("salamandra");
+  });
+
+  // The endpoint counts the tokens of a streamed reply only when asked to.
+  test("asks for the tokens of a streamed reply to be counted", async () => {
+    const events = [
+      { choices: [{ delta: { role: "assistant", content: "Bon dia" } }] },
+      { choices: [{ delta: {}, finish_reason: "stop" }] },
+      { choices: [], usage: { prompt_tokens: 12, completion_tokens: 5, total_tokens: 17 } },
+    ];
+    fetchMock.mockResolvedValueOnce(
+      new Response(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("") + "data: [DONE]\n\n", {
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    );
+    const { inputTokens, outputTokens } = await streamText({ model: chatModel(), prompt: "Hello" })
+      .totalUsage;
+    expect({ inputTokens, outputTokens }).toEqual({ inputTokens: 12, outputTokens: 5 });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).stream_options).toEqual({ include_usage: true });
   });
 
   test.each(["RUNPOD_API_KEY", "RUNPOD_ENDPOINT_ID"])("throws when %s is missing", (name) => {
