@@ -11,6 +11,7 @@ import {
   subscribeToSavedExchanges,
   unsaveExchange,
 } from "@/lib/saved-exchanges";
+import { recordReplyUsage, type ReplyUsage, resetTokenUsage } from "@/lib/token-usage";
 import ListenButton, {
   ListenFailure,
   MUTE_ICON,
@@ -23,7 +24,8 @@ import SavedExchanges, { useSavedExchanges } from "./saved-exchanges";
 
 // `hidden` marks messages that are sent to the model but never rendered.
 // `translate` marks messages that are to be translated instead of answered.
-type ChatMessage = UIMessage<{ hidden?: boolean; translate?: boolean }>;
+// `usage` comes with a reply: the tokens the model counted for it.
+type ChatMessage = UIMessage<{ hidden?: boolean; translate?: boolean; usage?: ReplyUsage }>;
 
 // Sent when the session starts, to wake the model before the user chats.
 // Kept in the history so the model sees its own greeting, but never rendered.
@@ -103,8 +105,10 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
   const { messages, sendMessage, setMessages, status, error, clearError } =
     useChat<ChatMessage>({
       // The session has started once the model has answered the greeting.
-      onFinish: ({ isAbort, isDisconnect, isError }) => {
-        if (!isAbort && !isDisconnect && !isError) setStarted(true);
+      onFinish: ({ message, isAbort, isDisconnect, isError }) => {
+        if (isAbort || isDisconnect || isError) return;
+        setStarted(true);
+        if (message.metadata?.usage) recordReplyUsage(message.metadata.usage);
       },
     });
   const loading = status === "submitted" || status === "streaming";
@@ -416,6 +420,7 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
             <button
               onClick={() => {
                 setMessages([]);
+                resetTokenUsage();
                 clearError();
                 setOffer(null);
                 // The sound of a saved exchange carries on; that of a reply

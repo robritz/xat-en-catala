@@ -25,8 +25,9 @@ function post(path: string, body: unknown) {
   });
 }
 
-// A model that streams the given text, or fails if given an error.
-function mockModel(reply: string | Error) {
+// A model that streams the given text, or fails if given an error. It counts
+// the tokens of the reply as 12 read and 5 written, unless told not to.
+function mockModel(reply: string | Error, { counted = true } = {}) {
   const model = new MockLanguageModelV4({
     doStream: async () => {
       if (reply instanceof Error) throw reply;
@@ -40,8 +41,13 @@ function mockModel(reply: string | Error) {
               type: "finish",
               finishReason: { unified: "stop", raw: undefined },
               usage: {
-                inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
-                outputTokens: { total: 1, text: 1, reasoning: undefined },
+                inputTokens: {
+                  total: counted ? 12 : undefined,
+                  noCache: undefined,
+                  cacheRead: undefined,
+                  cacheWrite: undefined,
+                },
+                outputTokens: { total: counted ? 5 : undefined, text: undefined, reasoning: undefined },
               },
             },
           ],
@@ -54,6 +60,15 @@ function mockModel(reply: string | Error) {
 }
 
 const messages = [{ id: "1", role: "user", parts: [{ type: "text", text: "Hola" }] }];
+
+// The metadata a streamed reply ends with.
+function replyMetadata(stream: string) {
+  const chunks = stream
+    .split("\n")
+    .filter((line) => line.startsWith("data: {"))
+    .map((line) => JSON.parse(line.slice("data: ".length)));
+  return chunks.find((chunk) => chunk.type === "finish")?.messageMetadata;
+}
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -136,6 +151,50 @@ describe("POST /api/chat", () => {
         content: [{ type: "text", text: "Translate this text into català:\n\nWhere do you live?" }],
       },
     ]);
+  });
+
+  test("ends the reply with the tokens the model read and wrote", async () => {
+    mockModel("Bon dia");
+    const res = await postChat(post("/api/chat", { messages }));
+    expect(replyMetadata(await res.text())).toEqual({
+      usage: { inputTokens: 12, outputTokens: 5, translation: false },
+    });
+  });
+
+  test("marks the tokens of a translation as such", async () => {
+    mockModel("On vius?");
+    const translation = [
+      {
+        id: "1",
+        role: "user",
+        metadata: { translate: true },
+        parts: [{ type: "text", text: "Where do you live?" }],
+      },
+    ];
+    const res = await postChat(post("/api/chat", { messages: translation }));
+    expect(replyMetadata(await res.text())).toEqual({
+      usage: { inputTokens: 12, outputTokens: 5, translation: true },
+    });
+  });
+
+  test("says nothing of tokens the endpoint didn't count", async () => {
+    mockModel("Bon dia", { counted: false });
+    const stream = await (await postChat(post("/api/chat", { messages }))).text();
+    expect(stream).toContain('"delta":"Bon dia"');
+    expect(replyMetadata(stream)).toBeUndefined();
+  });
+
+  test("logs the tokens of each reply as a line of JSON", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    mockModel("Bon dia");
+    await (await postChat(post("/api/chat", { messages }))).text();
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(log.mock.calls[0][0])).toEqual({
+      event: "reply_tokens",
+      inputTokens: 12,
+      outputTokens: 5,
+      translation: false,
+    });
   });
 
   test("reports a model failure in the stream without leaking the upstream error", async () => {

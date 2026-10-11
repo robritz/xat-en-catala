@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import { type ReplyUsage, resetTokenUsage, useTokenUsage } from "@/lib/token-usage";
 import Chat from "./chat";
 
 const GREETING = "say hello and include a random fact about catalonia.";
@@ -53,7 +54,8 @@ class FakeAudio {
   }
 }
 
-function reply(text: string) {
+// A reply, and the tokens the model counted for it, if it counted any.
+function reply(text: string, usage?: ReplyUsage) {
   return createUIMessageStreamResponse({
     stream: createUIMessageStream({
       execute({ writer }) {
@@ -61,7 +63,7 @@ function reply(text: string) {
         writer.write({ type: "text-start", id: "t" });
         writer.write({ type: "text-delta", id: "t", delta: text });
         writer.write({ type: "text-end", id: "t" });
-        writer.write({ type: "finish" });
+        writer.write({ type: "finish", messageMetadata: usage && { usage } });
       },
     }),
   });
@@ -268,6 +270,7 @@ function translateToggle() {
 beforeEach(() => {
   vi.restoreAllMocks();
   localStorage.clear();
+  resetTokenUsage();
   vi.stubGlobal("fetch", fetchMock);
   fetchMock.mockClear();
   // jsdom doesn't implement scrollIntoView.
@@ -456,6 +459,55 @@ describe("chatting", () => {
 
     await send("Hello again");
     expect(sentConversations().at(-1)).toEqual([{ role: "user", content: "Hello again" }]);
+  });
+});
+
+describe("the tokens of the conversation", () => {
+  // Any component can read them, wherever it is on the page.
+  function Tokens() {
+    const { conversationTokens, inputTokens, outputTokens } = useTokenUsage();
+    return <output>{`${conversationTokens} long, ${inputTokens} read, ${outputTokens} written`}</output>;
+  }
+
+  function tokens() {
+    return screen.getByRole("status").textContent;
+  }
+
+  async function renderStartedWithTokens() {
+    answer = reply("Hola!", { inputTokens: 40, outputTokens: 10, translation: false });
+    render(
+      <>
+        <Chat initiallyUnlocked />
+        <Tokens />
+      </>,
+    );
+    expect(tokens()).toBe("0 long, 0 read, 0 written");
+    await clickStart();
+  }
+
+  test("are counted from the greeting on, reply by reply", async () => {
+    await renderStartedWithTokens();
+    expect(tokens()).toBe("50 long, 40 read, 10 written");
+
+    answer = reply("Bon dia!", { inputTokens: 55, outputTokens: 5, translation: false });
+    await send("Hello");
+    expect(tokens()).toBe("60 long, 95 read, 15 written");
+  });
+
+  test("are left as they were by a reply the endpoint didn't count", async () => {
+    await renderStartedWithTokens();
+    answer = reply("Bon dia!");
+    await send("Hello");
+    expect(tokens()).toBe("50 long, 40 read, 10 written");
+  });
+
+  test("are counted afresh after Nova conversa", async () => {
+    await renderStartedWithTokens();
+    answer = reply("Bon dia!", { inputTokens: 55, outputTokens: 5, translation: false });
+    await send("Hello");
+
+    fireEvent.click(screen.getByRole("button", { name: NEW_BUTTON }));
+    expect(tokens()).toBe("0 long, 0 read, 0 written");
   });
 });
 
