@@ -42,6 +42,7 @@ Browser ──POST /api/chat──▶ Next.js ──POST <MODEL_HOST_URL>/chat/c
 
 - The browser uses the AI SDK's `useChat` hook, which sends the whole conversation on every message. The server keeps only the user and assistant text, adds the system prompt, and calls the model with `streamText` through the model host's OpenAI-compatible API.
 - The toggle button to the left of the input switches translation on and off. While it is on, what you enter is translated into Catalan as-is instead of answered, e.g. "Where do you live?" gets "On vius?"; while it is off, it is handled as a normal chat message. The browser marks such a message in its metadata, and the server sends only that text to the model, without the rest of the conversation, with a translation prompt in place of the usual system prompt. The model is too small to tell a text to translate from one to answer from the system prompt alone.
+- Every request carries a temperature of 1 and a top-p of 1, set in `src/lib/model-host.ts`. They are what RunPod applied when it was sent none, and sending them asks any other model host for the same thing.
 - The reply is streamed back and shown as it is written. Until the first words arrive, the UI shows "Pensant…".
 - Each reply ends with the tokens the model read and wrote for it, as the model host counted them. The browser keeps a running count for the conversation, which any component can read with `useTokenUsage`: how long the conversation is, which is what fills the model's context window, and the totals read and written. "Nova conversa" starts the count afresh. Nothing shows it yet.
 - The server logs the same counts for each reply as one line of JSON, e.g. `{"event":"reply_tokens","inputTokens":212,"outputTokens":48,"translation":false}`. It shows in the `next dev` terminal and in your host's logs, where it can be filtered by `reply_tokens`.
@@ -102,12 +103,13 @@ This is a light gate to keep casual visitors out, not real authentication. Anyon
 | Path                                | Purpose                                                         |
 | ----------------------------------- | --------------------------------------------------------------- |
 | `src/lib/chat.ts`                   | Validates the browser's messages, reduces them to plain text, and picks out translation requests |
-| `src/lib/model-host.ts`             | System and translation prompts, and the AI SDK model for the model host |
+| `src/lib/model-host.ts`             | System and translation prompts, sampling values, and the AI SDK model for the model host |
 | `src/lib/unlock.ts`                 | Secret phrase check and unlock cookie                           |
 | `src/lib/speech-text.ts`            | Normalizes a reply into text the TTS model can read             |
 | `src/lib/tts.ts`                    | Voice settings, and the speech and health requests to the Matxa-TTS API |
 | `src/lib/saved-exchanges.ts`        | Reads and writes the saved exchanges in the browser's `localStorage` |
 | `src/lib/token-usage.ts`            | The token counts of the conversation, readable from any component with `useTokenUsage` |
+| `docs/comparison/`                  | A fixed set of messages for comparing model hosts, RunPod's replies to them, and a script to replay them |
 | `src/app/api/unlock/route.ts`       | `POST /api/unlock`: checks the phrase and sets the cookie       |
 | `src/app/api/chat/route.ts`         | `POST /api/chat`: validates messages and streams the reply      |
 | `src/app/api/speak/route.ts`        | `POST /api/speak`: returns a reply as spoken audio              |

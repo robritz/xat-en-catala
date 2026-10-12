@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { defaultSettingsMiddleware, wrapLanguageModel } from "ai";
 
 // Written in català, the language the model was tuned on, and phrased as
 // what to do rather than what to avoid.
@@ -30,6 +31,12 @@ export const TRANSLATION_PROMPT = [
 // Hugging Face id.
 const DEFAULT_MODEL = "BSC-LT/salamandra-7b-instruct-2606";
 
+// Sent with every request, so that model hosts running different engines are
+// asked for the same thing. These are what RunPod's vLLM worker applied when
+// it was sent none: with a fixed seed its replies were the same with and
+// without them, and differed at a temperature of 0.7.
+const SAMPLING = { temperature: 1, topP: 1 };
+
 // The model behind the model host's OpenAI-compatible API.
 export function chatModel() {
   const baseURL = process.env.MODEL_HOST_URL;
@@ -44,5 +51,8 @@ export function chatModel() {
     // Without this the model host doesn't count the tokens of a streamed reply.
     includeUsage: true,
   });
-  return modelHost.chatModel(process.env.MODEL_NAME || DEFAULT_MODEL);
+  return wrapLanguageModel({
+    model: modelHost.chatModel(process.env.MODEL_NAME || DEFAULT_MODEL),
+    middleware: defaultSettingsMiddleware({ settings: SAMPLING }),
+  });
 }

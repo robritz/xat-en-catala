@@ -12,11 +12,17 @@ See `docs/specs/model-host-cloud-run.md`, sections "The app" and "Retiring RunPo
 
 **Status:** ready-for-agent
 
-- [ ] A plain file of about ten messages is checked in. It covers ordinary chat in more than one language, a request to reply in another language, **translation** with the toggle on, a translation of a text that itself ends in a sign-off, and a chat message whose reply the model tends to sign off.
-- [ ] Each message records whether it is sent as chat or as a translation, so it can be replayed the same way.
-- [ ] RunPod's effective temperature and top-p are established from the running endpoint or its worker's configuration, and how they were established is written down in the ticket or the commit.
-- [ ] The app sends that temperature and top-p on every request, for chat and for translation.
-- [ ] A test asserts that both values are sent.
-- [ ] RunPod's replies to the comparison messages, taken with the explicit values in place, are recorded beside the messages as the baseline, with the date and the host named.
-- [ ] How to replay the set against a host is described in a few lines next to the file. A script is acceptable but not required; judging the replies stays a matter of reading.
-- [ ] `npm test` and `npm run lint` pass.
+- [x] A plain file of about ten messages is checked in. It covers ordinary chat in more than one language, a request to reply in another language, **translation** with the toggle on, a translation of a text that itself ends in a sign-off, and a chat message whose reply the model tends to sign off.
+- [x] Each message records whether it is sent as chat or as a translation, so it can be replayed the same way.
+- [x] RunPod's effective temperature and top-p are established from the running endpoint or its worker's configuration, and how they were established is written down in the ticket or the commit.
+- [x] The app sends that temperature and top-p on every request, for chat and for translation.
+- [x] A test asserts that both values are sent.
+- [x] RunPod's replies to the comparison messages, taken with the explicit values in place, are recorded beside the messages as the baseline, with the date and the host named.
+- [x] How to replay the set against a host is described in a few lines next to the file. A script is acceptable but not required; judging the replies stays a matter of reading.
+- [x] `npm test` and `npm run lint` pass.
+
+## How RunPod's sampling values were established (2026-10-12)
+
+- The endpoint's template (`runpodctl template get jxeyvizza0`) sets no sampling default and no generation-config override, and the model's `generation_config.json` names no temperature or top-p.
+- Against the running endpoint, the same message was sent with a fixed `seed` (11, 22 and 33) four ways: with no sampling values, with `temperature: 1, top_p: 1`, with `temperature: 0.7`, and with `top_p: 0.8`. On all three seeds the reply with no values was repeatable and identical to the reply with a temperature of 1 and a top-p of 1. It differed at a temperature of 0.7 on all three, and at a top-p of 0.8 on two of three.
+- The effective values are therefore a temperature of 1 and a top-p of 1, as expected.

@@ -53,6 +53,13 @@ describe("chatModel", () => {
     expect(JSON.parse(fetchMock.mock.calls[0][1].body).stream_options).toEqual({ include_usage: true });
   });
 
+  // Engines differ in their defaults, so two model hosts are asked for the
+  // same thing only when the values are sent.
+  test("sends the temperature and top-p with a reply", async () => {
+    const { body } = await sentRequest();
+    expect(body).toMatchObject({ temperature: 1, top_p: 1 });
+  });
+
   test.each(["MODEL_HOST_URL", "MODEL_HOST_API_KEY"])("throws when %s is missing", (name) => {
     vi.stubEnv(name, "");
     expect(() => chatModel()).toThrow("MODEL_HOST_URL and MODEL_HOST_API_KEY must be set");

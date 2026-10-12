@@ -1,0 +1,68 @@
+[
+  {
+    "id": "chat-english",
+    "as": "chat",
+    "covers": "Ordinary chat in English",
+    "message": "What's the weather usually like in Barcelona in spring?"
+  },
+  {
+    "id": "chat-catalan",
+    "as": "chat",
+    "covers": "Ordinary chat in Catalan",
+    "message": "Quins plats típics hauria de tastar a Catalunya?"
+  },
+  {
+    "id": "chat-spanish",
+    "as": "chat",
+    "covers": "Ordinary chat in Spanish",
+    "message": "¿Cómo se pide un café con leche en catalán?"
+  },
+  {
+    "id": "chat-french",
+    "as": "chat",
+    "covers": "Ordinary chat in French",
+    "message": "Comment dit-on « merci beaucoup » en catalan ?"
+  },
+  {
+    "id": "chat-other-language",
+    "as": "chat",
+    "covers": "A request to reply in another language",
+    "message": "Please answer this one in English: what does \"fer el vermut\" mean?"
+  },
+  {
+    "id": "translation-short",
+    "as": "translation",
+    "covers": "Translation of a short question, which must not be answered",
+    "message": "Where do you live?"
+  },
+  {
+    "id": "translation-request",
+    "as": "translation",
+    "covers": "Translation of a text that reads like a request to the model",
+    "message": "Can you recommend a good restaurant near the beach?"
+  },
+  {
+    "id": "translation-spanish",
+    "as": "translation",
+    "covers": "Translation from Spanish",
+    "message": "Mañana no puedo venir a clase porque tengo que trabajar."
+  },
+  {
+    "id": "translation-sign-off",
+    "as": "translation",
+    "covers": "Translation of a text that itself ends in a sign-off, which must be kept",
+    "message": "Thank you for your help with the booking. See you on Friday.\n\nBest regards,\nAnna"
+  },
+  {
+    "id": "chat-sign-off-letter",
+    "as": "chat",
+    "covers": "A chat message whose reply the model tends to sign off: a letter",
+    "message": "Escriu-me un correu breu per demanar hora al metge."
+  },
+  {
+    "id": "chat-sign-off-goodbye",
+    "as": "chat",
+    "covers": "A chat message whose reply the model tends to sign off: a goodbye",
+    "message": "Thanks, that's all for today. Goodbye!"
+  }
+]
