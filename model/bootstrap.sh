@@ -30,25 +30,25 @@ WEIGHTS_OBJECT="gs://${BUCKET}/${WEIGHTS_REVISION}/${WEIGHTS_FILE}"
 
 command -v gcloud >/dev/null || PATH="${HOME}/google-cloud-sdk/bin:${PATH}"
 
-gc() {
+in_project() {
   gcloud --project "${PROJECT}" --quiet "$@"
 }
 
 exists() {
-  gc "$@" >/dev/null 2>&1
+  in_project "$@" >/dev/null 2>&1
 }
 
 # A service account can take a few seconds to be visible to IAM after it is
 # created, so a binding that names one is tried more than once.
-bind() {
+grant() {
   local attempt
   for attempt in 1 2 3 4 5; do
-    if gc "$@" >/dev/null; then
+    if in_project "$@" >/dev/null; then
       return 0
     fi
     sleep $((attempt * 3))
   done
-  echo "Could not add the binding: gcloud $*" >&2
+  echo "Could not grant: gcloud $*" >&2
   return 1
 }
 
@@ -61,7 +61,7 @@ sha256() {
 }
 
 echo "APIs"
-gc services enable \
+in_project services enable \
   artifactregistry.googleapis.com \
   cloudbuild.googleapis.com \
   iam.googleapis.com \
@@ -72,7 +72,7 @@ gc services enable \
 
 echo "Artifact Registry repository ${REPOSITORY}"
 if ! exists artifacts repositories describe "${REPOSITORY}" --location "${REGION}"; then
-  gc artifacts repositories create "${REPOSITORY}" \
+  in_project artifacts repositories create "${REPOSITORY}" \
     --location "${REGION}" \
     --repository-format docker \
     --description "Images of the model host"
@@ -80,7 +80,7 @@ fi
 
 echo "Bucket ${BUCKET}"
 if ! exists storage buckets describe "gs://${BUCKET}"; then
-  gc storage buckets create "gs://${BUCKET}" \
+  in_project storage buckets create "gs://${BUCKET}" \
     --location "${REGION}" \
     --uniform-bucket-level-access \
     --public-access-prevention
@@ -88,55 +88,55 @@ fi
 
 echo "Service accounts"
 if ! exists iam service-accounts describe "${SERVICE_EMAIL}"; then
-  gc iam service-accounts create "${SERVICE_ACCOUNT}" \
+  in_project iam service-accounts create "${SERVICE_ACCOUNT}" \
     --display-name "Model host service"
 fi
 if ! exists iam service-accounts describe "${PIPELINE_EMAIL}"; then
-  gc iam service-accounts create "${PIPELINE_ACCOUNT}" \
+  in_project iam service-accounts create "${PIPELINE_ACCOUNT}" \
     --display-name "Model host pipeline"
 fi
 
 echo "Secret ${SECRET}"
 if ! exists secrets describe "${SECRET}"; then
-  gc secrets create "${SECRET}" \
+  in_project secrets create "${SECRET}" \
     --replication-policy user-managed \
     --locations "${REGION}"
 fi
 # The key goes from the generator to Secret Manager through a pipe, so it is
 # never held in a variable, written to a file or shown. It has no trailing
-# newline, which the server would otherwise take as part of the key.
-versions="$(gc secrets versions list "${SECRET}" --filter "state=ENABLED" --limit 1 --format "value(name)")"
+# newline, which llama.cpp would otherwise take as part of the key.
+versions="$(in_project secrets versions list "${SECRET}" --filter "state=ENABLED" --limit 1 --format "value(name)")"
 if [ -z "${versions}" ]; then
   openssl rand -hex 32 | tr -d '\n' |
-    gc secrets versions add "${SECRET}" --data-file - >/dev/null
+    in_project secrets versions add "${SECRET}" --data-file - >/dev/null
 fi
 
 echo "Roles"
 # The service reads the key, and nothing else.
-bind secrets add-iam-policy-binding "${SECRET}" \
+grant secrets add-iam-policy-binding "${SECRET}" \
   --member "serviceAccount:${SERVICE_EMAIL}" \
   --role roles/secretmanager.secretAccessor
 # The pipeline pushes images to this repository,
-bind artifacts repositories add-iam-policy-binding "${REPOSITORY}" \
+grant artifacts repositories add-iam-policy-binding "${REPOSITORY}" \
   --location "${REGION}" \
   --member "serviceAccount:${PIPELINE_EMAIL}" \
   --role roles/artifactregistry.writer
 # deploys the service, which includes opening it to unauthenticated requests,
-bind projects add-iam-policy-binding "${PROJECT}" \
+grant projects add-iam-policy-binding "${PROJECT}" \
   --member "serviceAccount:${PIPELINE_EMAIL}" \
   --role roles/run.admin \
   --condition None
 # as the service's account and no other,
-bind iam service-accounts add-iam-policy-binding "${SERVICE_EMAIL}" \
+grant iam service-accounts add-iam-policy-binding "${SERVICE_EMAIL}" \
   --member "serviceAccount:${PIPELINE_EMAIL}" \
   --role roles/iam.serviceAccountUser
 # writes its build logs,
-bind projects add-iam-policy-binding "${PROJECT}" \
+grant projects add-iam-policy-binding "${PROJECT}" \
   --member "serviceAccount:${PIPELINE_EMAIL}" \
   --role roles/logging.logWriter \
   --condition None
 # and reads the weights file to build the weights image.
-bind storage buckets add-iam-policy-binding "gs://${BUCKET}" \
+grant storage buckets add-iam-policy-binding "gs://${BUCKET}" \
   --member "serviceAccount:${PIPELINE_EMAIL}" \
   --role roles/storage.objectViewer
 
@@ -146,7 +146,7 @@ if ! exists storage objects describe "${WEIGHTS_OBJECT}"; then
   trap 'rm -rf "${download}"' EXIT
 
   echo "  fetching 6.38 GB from Hugging Face"
-  curl --fail --location --retry 5 --continue-at - \
+  curl --fail --location --retry 5 \
     --output "${download}/${WEIGHTS_FILE}" \
     "https://huggingface.co/${WEIGHTS_REPO}/resolve/${WEIGHTS_REVISION}/${WEIGHTS_FILE}"
 
@@ -160,7 +160,7 @@ if ! exists storage objects describe "${WEIGHTS_OBJECT}"; then
   fi
 
   echo "  storing it in the bucket"
-  gc storage cp "${download}/${WEIGHTS_FILE}" "${WEIGHTS_OBJECT}" \
+  in_project storage cp "${download}/${WEIGHTS_FILE}" "${WEIGHTS_OBJECT}" \
     --custom-metadata "sha256=${WEIGHTS_SHA256}"
 fi
 
