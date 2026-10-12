@@ -50,7 +50,17 @@ describe("chatModel", () => {
     const { inputTokens, outputTokens } = await streamText({ model: chatModel(), prompt: "Hello" })
       .totalUsage;
     expect({ inputTokens, outputTokens }).toEqual({ inputTokens: 12, outputTokens: 5 });
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body).stream_options).toEqual({ include_usage: true });
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.stream_options).toEqual({ include_usage: true });
+    // A streamed reply is asked for with the same sampling values.
+    expect(body).toMatchObject({ temperature: 1, top_p: 1 });
+  });
+
+  // Engines differ in their defaults, so two model hosts are asked for the
+  // same thing only when the values are sent.
+  test("sends the temperature and top-p with a request", async () => {
+    const { body } = await sentRequest();
+    expect(body).toMatchObject({ temperature: 1, top_p: 1 });
   });
 
   test.each(["MODEL_HOST_URL", "MODEL_HOST_API_KEY"])("throws when %s is missing", (name) => {
