@@ -78,7 +78,7 @@ gcloud builds submit --no-source \
   --service-account projects/<project>/serviceAccounts/model-host-pipeline@<project>.iam.gserviceaccount.com
 ```
 
-Its tag names the quantisation and the revision it holds, as in `weights:Q6_K-8bcd7d8d8545749ef73b3046f7cb5cd64d8c70c1`. To change the weights, change the file, revision and checksum at the top of `model/bootstrap.sh` and the same file and revision in `model/cloudbuild-weights.yaml`, then run both again.
+Its tag names the quantisation and the revision it holds, as in `weights:Q6_K-8bcd7d8d8545749ef73b3046f7cb5cd64d8c70c1`. To change the weights, change the file, revision and checksum at the top of `model/bootstrap.sh` and the same file and revision in `model/cloudbuild-weights.yaml`, then run both again. The service image names them too: the weights image's tag in `model/cloudbuild.yaml` and the file in `model/Dockerfile`.
 
 ### The service image
 
@@ -113,7 +113,7 @@ The service is `model-host` in `europe-west4`: one NVIDIA L4, 4 CPUs and 16 GiB 
 
 To point the app at it, set `MODEL_HOST_URL` to the service's URL followed by `/v1`, and `MODEL_HOST_API_KEY` to the key.
 
-`model/time-reply.mjs` sends the service one message and prints, as one line of JSON, how long the first word of the reply took, which is the cold start when no instance was running:
+`model/time-reply.mjs` sends the model host one message and prints, as one line of JSON, how long the first word of the reply took, which is the cold start when no instance was running:
 
 ```bash
 MODEL_HOST_API_KEY=$(gcloud secrets versions access latest --secret model-host-api-key) \

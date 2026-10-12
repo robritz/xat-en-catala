@@ -3,7 +3,7 @@
 # Deploys a service image as the model host on Cloud Run. Every setting of the
 # service is here. It starts a GPU instance, which is billed while it runs.
 #
-#   model/deploy.sh IMAGE [further gcloud run deploy flags]
+#   model/deploy.sh IMAGE
 #
 # To build the image first, from the repository root:
 #
@@ -19,15 +19,14 @@ PROJECT="project-45649980-817a-462c-b12"
 REGION="europe-west4"
 
 SERVICE="model-host"
-SERVICE_ACCOUNT="model-host@${PROJECT}.iam.gserviceaccount.com"
+SERVICE_EMAIL="model-host@${PROJECT}.iam.gserviceaccount.com"
 SECRET="model-host-api-key"
 
-if [ $# -lt 1 ]; then
-  echo "Usage: model/deploy.sh IMAGE [further gcloud run deploy flags]" >&2
+if [ $# -ne 1 ]; then
+  echo "Usage: model/deploy.sh IMAGE" >&2
   exit 1
 fi
 image="$1"
-shift
 
 command -v gcloud >/dev/null || PATH="${HOME}/google-cloud-sdk/bin:${PATH}"
 
@@ -42,13 +41,13 @@ command -v gcloud >/dev/null || PATH="${HOME}/google-cloud-sdk/bin:${PATH}"
 #
 # The timeout matches the app's chat route, which holds a request open through
 # a cold start. The startup probe keeps requests from an instance until the
-# weights are loaded: the server's health route fails until then. It gives up
-# after four minutes, the longest Cloud Run allows.
+# weights are loaded: the server's health route fails until then. It asks
+# every second and gives up after four minutes.
 gcloud run deploy "${SERVICE}" \
   --project "${PROJECT}" \
   --region "${REGION}" \
   --image "${image}" \
-  --service-account "${SERVICE_ACCOUNT}" \
+  --service-account "${SERVICE_EMAIL}" \
   --gpu 1 \
   --gpu-type nvidia-l4 \
   --no-gpu-zonal-redundancy \
@@ -62,5 +61,4 @@ gcloud run deploy "${SERVICE}" \
   --timeout 300 \
   --port 8080 \
   --set-secrets "LLAMA_API_KEY=${SECRET}:latest" \
-  --startup-probe "httpGet.path=/health,httpGet.port=8080,periodSeconds=1,timeoutSeconds=1,failureThreshold=240" \
-  "$@"
+  --startup-probe "httpGet.path=/health,httpGet.port=8080,periodSeconds=1,timeoutSeconds=1,failureThreshold=240"

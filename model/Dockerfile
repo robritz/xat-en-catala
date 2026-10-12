@@ -2,6 +2,7 @@
 #
 # The weights come from the weights image, which model/cloudbuild-weights.yaml
 # builds, so that building this image never fetches them from anywhere else.
+# That file names the weights file, as the CMD below does.
 
 ARG WEIGHTS_IMAGE
 # hadolint ignore=DL3006

@@ -19,7 +19,7 @@ const sentAt = performance.now();
 const secondsSinceSent = () =>
   Number(((performance.now() - sentAt) / 1000).toFixed(1));
 
-const response = await fetch(
+const res = await fetch(
   `${serviceUrl.replace(/\/$/, "")}/v1/chat/completions`,
   {
     method: "POST",
@@ -37,26 +37,25 @@ const response = await fetch(
     }),
   },
 );
-if (!response.ok) {
-  console.error(`The model host answered ${response.status}.`);
-  process.exit(1);
+if (!res.ok) {
+  throw new Error(`The model host answered ${res.status}.`);
 }
 
 let reply = "";
 let firstWordSeconds = null;
 let usage = null;
 let unread = "";
-for await (const bytes of response.body.pipeThrough(new TextDecoderStream())) {
-  unread += bytes;
+for await (const text of res.body.pipeThrough(new TextDecoderStream())) {
+  unread += text;
   const lines = unread.split("\n");
   unread = lines.pop();
   for (const line of lines) {
     if (!line.startsWith("data: ") || line === "data: [DONE]") continue;
     const chunk = JSON.parse(line.slice("data: ".length));
-    const text = chunk.choices?.[0]?.delta?.content;
-    if (text) {
+    const words = chunk.choices?.[0]?.delta?.content;
+    if (words) {
       firstWordSeconds ??= secondsSinceSent();
-      reply += text;
+      reply += words;
     }
     usage = chunk.usage ?? usage;
   }
