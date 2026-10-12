@@ -1,6 +1,7 @@
 // Sends the comparison messages to a running copy of the app, one at a time,
 // and prints its replies as Markdown. The app decides which model host
-// answers, by its MODEL_HOST_URL. See README.md beside this file.
+// answers, by its MODEL_HOST_URL; the name given here only labels the output.
+// See README.md beside this file.
 
 import { readFile } from "node:fs/promises";
 
@@ -16,12 +17,14 @@ if (!host || !phrase) {
 const unlock = await fetch(`${appUrl}/api/unlock`, {
   method: "POST",
   body: JSON.stringify({ phrase }),
+}).catch((cause) => {
+  throw new Error(`The app could not be reached at ${appUrl}. Is it running?`, { cause });
 });
 if (!unlock.ok) throw new Error(`The app refused the secret phrase: ${unlock.status}`);
 const cookie = unlock.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
 
 // Sends a message as the chat does: on its own, marked for translation or not.
-async function reply({ message, as }) {
+async function send({ message, as }) {
   const res = await fetch(`${appUrl}/api/chat`, {
     method: "POST",
     headers: { cookie },
@@ -36,7 +39,7 @@ async function reply({ message, as }) {
       ],
     }),
   });
-  if (!res.ok) throw new Error(`The app answered ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw new Error(`The app returned ${res.status}: ${await res.text()}`);
   let text = "";
   let usage;
   for (const line of (await res.text()).split("\n")) {
@@ -46,6 +49,7 @@ async function reply({ message, as }) {
     if (part.type === "error") throw new Error(`The reply failed: ${part.errorText}`);
     if (part.type === "finish") usage = part.messageMetadata?.usage;
   }
+  if (!text) throw new Error(`The reply to "${message}" came back empty`);
   return { text, usage };
 }
 
@@ -53,13 +57,20 @@ const quoted = (text) => text.split("\n").map((line) => `> ${line}`.trimEnd()).j
 
 const messages = JSON.parse(await readFile(new URL("messages.json", import.meta.url), "utf8"));
 
-console.log(`# Replies from ${host}\n`);
-console.log(`Taken on ${new Date().toISOString().slice(0, 10)} from the model host "${host}".\n`);
+// Nothing is printed until every reply is in, so a run that fails part of the
+// way leaves no half-written file behind.
+const sections = [
+  `# Replies from ${host}`,
+  `Taken on ${new Date().toISOString().slice(0, 10)} from the model host "${host}".`,
+];
 for (const entry of messages) {
-  const { text, usage } = await reply(entry);
+  const { text, usage } = await send(entry);
   const tokens = usage ? `${usage.inputTokens} read, ${usage.outputTokens} written` : "not counted";
-  console.log(`## ${entry.id}\n`);
-  console.log(`${entry.covers}. Sent as ${entry.as}.\n`);
-  console.log(`**Message**\n\n${quoted(entry.message)}\n`);
-  console.log(`**Reply** (tokens: ${tokens})\n\n${quoted(text)}\n`);
+  sections.push(
+    `## ${entry.id}`,
+    `${entry.covers}. Sent as ${entry.as}.`,
+    `**Message**\n\n${quoted(entry.message)}`,
+    `**Reply** (tokens: ${tokens})\n\n${quoted(text)}`,
+  );
 }
+console.log(sections.join("\n\n") + "\n");

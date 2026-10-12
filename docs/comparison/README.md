@@ -12,7 +12,7 @@ A fixed set of messages for telling whether one **model host** answers as well a
 
 1. Point the app at the host: set `MODEL_HOST_URL` and `MODEL_HOST_API_KEY` in `.env.local`, and start it with `npm run dev`.
 2. Make sure the host is awake, or the first message waits through a cold start.
-3. Run the script from the repository root, naming the host, and keep what it prints:
+3. Run the script from the repository root and keep what it prints. The name given only labels the output, so give the name of the host the app is pointed at:
 
    ```bash
    node --env-file=.env.local docs/comparison/replay.mjs "Cloud Run" > docs/comparison/replies-cloud-run.md
@@ -22,10 +22,10 @@ The script unlocks the app with `CHAT_SECRET_PHRASE` and sends each message on i
 
 ## Reading the replies
 
-Replies are sampled, so two runs against the same host differ in wording. Compare how well they read, not whether they match:
+Replies are sampled, so two runs against the same host differ in wording. Compare how well they read against the baseline, not whether they match:
 
 - A chat reply is in Catalan, unless the message asked for another language.
 - A translation renders the message and does not answer it.
 - A translation keeps a sign-off that was in the text.
-- A chat reply does not end in a sign-off of the model's own, such as "Salutacions".
+- A chat reply does not end in a goodbye of the model's own to the learner, such as "Salutacions". The close of a letter the message asked for is part of the reply; RunPod's baseline has one.
 - Token counts arrive with every reply.
