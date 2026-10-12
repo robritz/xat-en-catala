@@ -49,6 +49,37 @@ Browser ──POST /api/chat──▶ Next.js ──POST <MODEL_HOST_URL>/chat/c
 - The RunPod endpoint scales to zero when idle. **The first request after idle time can take about 3–4 minutes** while a worker starts, and the request stays open for all of that time. To absorb that wait up front, each page load begins with an "Iniciar la sessió" button. It sends a hidden message to wake the model, asking it to say hello and share a random fact about Catalonia, and the UI shows "La IA s'està despertant. Un moment, si us plau." until the greeting comes back; only then is the chat enabled. After that the message is never shown again; a slow reply later in the session just shows "Pensant…". To avoid cold starts, set the endpoint's minimum active workers to 1 in RunPod; that worker is billed while idle.
 - Because the request stays open during a cold start, `/api/chat` sets `maxDuration` to 300 seconds. If your host caps function time below the cold start, the session start fails with an error and can be retried once the worker is up.
 
+## The model host on Cloud Run
+
+A second model host is being built on Google Cloud Run, to bring the cold start under a minute: a quantised copy of the model served by llama.cpp. The plan is in `docs/specs/model-host-cloud-run.md` and the reasons for the engine in `docs/adr/0001-quantised-llama-cpp-on-cloud-run.md`. RunPod serves the app until the new host has been compared with it. So far `model/` holds what the host is assembled from, and not the host itself.
+
+`model/bootstrap.sh` creates the cloud resources, in the project and region named at its top:
+
+- a Docker repository in Artifact Registry, `model-host`;
+- a bucket, `<project>-model-weights`, private and in the same region;
+- a service account for the service, `model-host`, which can read the API key and nothing else;
+- a service account for the pipeline, `model-host-pipeline`, which can push images to the repository, deploy to Cloud Run as the service's account, write build logs, and read the bucket;
+- a secret in Secret Manager, `model-host-api-key`, holding a key the script generates. The key is never shown. To read it, for the app's `MODEL_HOST_API_KEY`, run `gcloud secrets versions access latest --secret model-host-api-key`.
+
+It then mirrors the weights into the bucket, so that no build depends on Hugging Face: the Q6_K quantisation of the model, 6.38 GB, from [`mradermacher/salamandra-7b-instruct-2606-GGUF`](https://huggingface.co/mradermacher/salamandra-7b-instruct-2606-GGUF) at a pinned revision. The file is downloaded to a temporary directory, its SHA-256 is checked against the value in the script, and it is uploaded only if they match.
+
+```bash
+model/bootstrap.sh
+```
+
+It needs `gcloud`, signed in as someone who can create these resources, plus `curl` and `openssl`. It can be run again: whatever already exists is left alone, including the key and the weights file. The repository, the bucket and the secret are billed for what they store, which is a few cents a day.
+
+The weights image holds the weights file and nothing else, and the service image will copy the file from it. It is built by hand with the command the script prints when it finishes, once, and again only when the weights change:
+
+```bash
+gcloud builds submit --no-source \
+  --project <project> --region europe-west4 \
+  --config model/cloudbuild-weights.yaml \
+  --service-account projects/<project>/serviceAccounts/model-host-pipeline@<project>.iam.gserviceaccount.com
+```
+
+Its tag names the quantisation and the revision it holds, as in `weights:Q6_K-8bcd7d8d8545749ef73b3046f7cb5cd64d8c70c1`. To change the weights, change the file, revision and checksum at the top of `model/bootstrap.sh` and the same file and revision in `model/cloudbuild-weights.yaml`, then run both again.
+
 ## Hearing a reply
 
 Tap a reply and a speaker button appears under it. Tapping that plays the reply as speech; tapping the reply again, or pressing anywhere else, dismisses it. While the reply is being spoken the button becomes a mute button, which ends the sound, and a second mute button shows in the header.
@@ -110,6 +141,8 @@ This is a light gate to keep casual visitors out, not real authentication. Anyon
 | `src/lib/saved-exchanges.ts`        | Reads and writes the saved exchanges in the browser's `localStorage` |
 | `src/lib/token-usage.ts`            | The token counts of the conversation, readable from any component with `useTokenUsage` |
 | `docs/comparison/`                  | A fixed set of messages for comparing model hosts, RunPod's replies to them, and a script to replay them |
+| `model/bootstrap.sh`                | Creates the cloud resources the Cloud Run model host is assembled from, and mirrors the weights into the project |
+| `model/cloudbuild-weights.yaml`     | Builds the weights image from the mirrored file. Run by hand    |
 | `src/app/api/unlock/route.ts`       | `POST /api/unlock`: checks the phrase and sets the cookie       |
 | `src/app/api/chat/route.ts`         | `POST /api/chat`: validates messages and streams the reply      |
 | `src/app/api/speak/route.ts`        | `POST /api/speak`: returns a reply as spoken audio              |

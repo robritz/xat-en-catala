@@ -1,0 +1,45 @@
+# Builds the weights image: the quantised weights file and nothing else. The
+# service image copies the file from it, so a routine deploy never moves the
+# weights.
+#
+# Run by hand, once, and again only when the weights change. model/bootstrap.sh
+# prints the command. It needs no source: the file comes from the bucket that
+# script mirrors it into, never from Hugging Face.
+
+substitutions:
+  _REPOSITORY: model-host
+  _QUANTISATION: Q6_K
+  _REVISION: 8bcd7d8d8545749ef73b3046f7cb5cd64d8c70c1
+  _FILE: salamandra-7b-instruct-2606.Q6_K.gguf
+
+steps:
+  - id: fetch the weights from the bucket
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - storage
+      - cp
+      - gs://${PROJECT_ID}-model-weights/${_REVISION}/${_FILE}
+      - /workspace/weights/${_FILE}
+
+  # The build context is the directory holding the one file, and the image
+  # starts from nothing, so the file is all it holds.
+  - id: build the weights image
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        printf 'FROM scratch\nCOPY ${_FILE} /models/${_FILE}\n' |
+          docker build --file - \
+            --tag '${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/weights:${_QUANTISATION}-${_REVISION}' \
+            /workspace/weights
+
+images:
+  - ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/weights:${_QUANTISATION}-${_REVISION}
+
+timeout: 1800s
+
+options:
+  # A build that runs as its own service account has to say where its logs go.
+  logging: CLOUD_LOGGING_ONLY
