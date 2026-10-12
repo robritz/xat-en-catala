@@ -51,7 +51,7 @@ Browser ──POST /api/chat──▶ Next.js ──POST <MODEL_HOST_URL>/chat/c
 
 ## The model host on Cloud Run
 
-A second model host is being built on Google Cloud Run, to bring the cold start under a minute: a quantised copy of the model served by llama.cpp. The plan is in `docs/specs/model-host-cloud-run.md` and the reasons for the engine in `docs/adr/0001-quantised-llama-cpp-on-cloud-run.md`. RunPod serves the app until the new host has been compared with it. So far `model/` holds what the host is assembled from, and not the host itself.
+A second model host is being built on Google Cloud Run, to bring the cold start under a minute: a quantised copy of the model served by llama.cpp. The plan is in `docs/specs/model-host-cloud-run.md` and the reasons for the engine in `docs/adr/0001-quantised-llama-cpp-on-cloud-run.md`. RunPod serves the app until the new host has been compared with it. Everything the host is built and deployed from is in `model/`.
 
 `model/bootstrap.sh` creates the cloud resources, in the project and region named at its top:
 
@@ -79,6 +79,46 @@ gcloud builds submit --no-source \
 ```
 
 Its tag names the quantisation and the revision it holds, as in `weights:Q6_K-8bcd7d8d8545749ef73b3046f7cb5cd64d8c70c1`. To change the weights, change the file, revision and checksum at the top of `model/bootstrap.sh` and the same file and revision in `model/cloudbuild-weights.yaml`, then run both again.
+
+### The service image
+
+`model/Dockerfile` puts the weights beside llama.cpp's server. It starts from the official `server-cuda` image, pinned by digest, and copies the weights from the weights image into a layer of their own, ahead of the server's flags, so that changing a flag does not move 6.4 GB. The flags are the image's `CMD`:
+
+- four replies at once, with 8,192 tokens of context each;
+- the chat template embedded in the weights file, since no other is given;
+- top-k and min-p switched off, so that sampling is governed by the temperature and top-p the app sends;
+- the model served under the name the app asks for by default, `BSC-LT/salamandra-7b-instruct-2606`.
+
+The server checks an API key on every request except its health route. It reads the key from `LLAMA_API_KEY`, which Cloud Run sets from Secret Manager, so the key is in no image and no script.
+
+`model/cloudbuild.yaml` builds the image in Cloud Build and pushes it as `service:<tag>`. From the repository root:
+
+```bash
+gcloud builds submit model --config model/cloudbuild.yaml \
+  --project <project> --region europe-west4 \
+  --service-account projects/<project>/serviceAccounts/model-host-pipeline@<project>.iam.gserviceaccount.com \
+  --gcs-source-staging-dir gs://<project>-model-weights/source \
+  --substitutions _TAG=$(git rev-parse --short HEAD)
+```
+
+### Deploying by hand
+
+`model/deploy.sh` holds every setting of the Cloud Run service and takes the image to deploy:
+
+```bash
+model/deploy.sh europe-west4-docker.pkg.dev/<project>/model-host/service:<tag>
+```
+
+The service is `model-host` in `europe-west4`: one NVIDIA L4, 4 CPUs and 16 GiB of memory, billed while an instance is up. It scales between zero and one instance, so it costs nothing when idle and never more than one GPU, and it takes four requests at once. A startup probe on the server's `/health` keeps requests from an instance until the weights are loaded. Cloud Run lets anyone reach the service; the API key is the gate. **A deploy starts a GPU instance**, which Cloud Run shuts down again after it has been idle for a while.
+
+To point the app at it, set `MODEL_HOST_URL` to the service's URL followed by `/v1`, and `MODEL_HOST_API_KEY` to the key.
+
+`model/time-reply.mjs` sends the service one message and prints, as one line of JSON, how long the first word of the reply took, which is the cold start when no instance was running:
+
+```bash
+MODEL_HOST_API_KEY=$(gcloud secrets versions access latest --secret model-host-api-key) \
+  node model/time-reply.mjs https://<service URL>
+```
 
 ## Hearing a reply
 
@@ -143,6 +183,10 @@ This is a light gate to keep casual visitors out, not real authentication. Anyon
 | `docs/comparison/`                  | A fixed set of messages for comparing model hosts, RunPod's replies to them, and a script to replay them |
 | `model/bootstrap.sh`                | Creates the cloud resources the Cloud Run model host is assembled from, and mirrors the weights into the project |
 | `model/cloudbuild-weights.yaml`     | Builds the weights image from the mirrored file. Run by hand    |
+| `model/Dockerfile`                  | The model host's service image: llama.cpp's server, the weights and the server's flags |
+| `model/cloudbuild.yaml`             | Builds the service image and pushes it                          |
+| `model/deploy.sh`                   | Deploys an image as the Cloud Run service, and holds its settings |
+| `model/time-reply.mjs`              | Sends the model host one message and times the reply            |
 | `src/app/api/unlock/route.ts`       | `POST /api/unlock`: checks the phrase and sets the cookie       |
 | `src/app/api/chat/route.ts`         | `POST /api/chat`: validates messages and streams the reply      |
 | `src/app/api/speak/route.ts`        | `POST /api/speak`: returns a reply as spoken audio              |

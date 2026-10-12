@@ -1,0 +1,31 @@
+# Builds the model host's service image and pushes it. The source is this
+# directory. Run by hand for now, as model/deploy.sh's comment shows.
+#
+# _TAG has no default, so that an image is never pushed under a tag nobody
+# chose: by hand it is the commit the image was built from.
+
+substitutions:
+  _REPOSITORY: model-host
+  _WEIGHTS_TAG: Q6_K-8bcd7d8d8545749ef73b3046f7cb5cd64d8c70c1
+
+steps:
+  - id: build the service image
+    name: gcr.io/cloud-builders/docker
+    env:
+      - DOCKER_BUILDKIT=1
+    args:
+      - build
+      - --build-arg
+      - WEIGHTS_IMAGE=${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/weights:${_WEIGHTS_TAG}
+      - --tag
+      - ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/service:${_TAG}
+      - .
+
+images:
+  - ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/service:${_TAG}
+
+timeout: 1800s
+
+options:
+  # A build that runs as its own service account has to say where its logs go.
+  logging: CLOUD_LOGGING_ONLY
