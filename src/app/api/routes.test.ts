@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { MockLanguageModelV4, simulateReadableStream } from "ai/test";
-import { chatModel } from "@/lib/runpod";
+import { chatModel } from "@/lib/model-host";
 import { isSpeechAvailable, synthesize } from "@/lib/tts";
 import { isUnlocked, tryUnlock } from "@/lib/unlock";
 import { POST as postChat } from "./chat/route";
@@ -9,7 +9,7 @@ import { GET as getSpeakHealth } from "./speak/health/route";
 import { POST as postSpeak } from "./speak/route";
 import { POST as postUnlock } from "./unlock/route";
 
-vi.mock("@/lib/runpod", () => ({
+vi.mock("@/lib/model-host", () => ({
   chatModel: vi.fn(),
   SYSTEM_PROMPT: "Respon en català.",
   TRANSLATION_PROMPT: "Tradueix al català.",
@@ -177,7 +177,7 @@ describe("POST /api/chat", () => {
     });
   });
 
-  test("says nothing of tokens the endpoint didn't count", async () => {
+  test("says nothing of tokens the model host didn't count", async () => {
     mockModel("Bon dia", { counted: false });
     const stream = await (await postChat(post("/api/chat", { messages }))).text();
     expect(stream).toContain('"delta":"Bon dia"');
@@ -198,7 +198,7 @@ describe("POST /api/chat", () => {
   });
 
   test("reports a model failure in the stream without leaking the upstream error", async () => {
-    mockModel(new Error("RunPod HTTP 500: secret details"));
+    mockModel(new Error("Model host HTTP 500: secret details"));
     const res = await postChat(post("/api/chat", { messages }));
     const stream = await res.text();
     expect(stream).toContain('"errorText":"Upstream error"');
@@ -207,7 +207,7 @@ describe("POST /api/chat", () => {
 
   test("returns 502 when the model isn't configured", async () => {
     vi.mocked(chatModel).mockImplementation(() => {
-      throw new Error("RUNPOD_API_KEY and RUNPOD_ENDPOINT_ID must be set");
+      throw new Error("MODEL_HOST_URL and MODEL_HOST_API_KEY must be set");
     });
     const res = await postChat(post("/api/chat", { messages }));
     expect(res.status).toBe(502);
