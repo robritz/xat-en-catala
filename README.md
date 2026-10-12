@@ -25,27 +25,27 @@ Open http://localhost:3000.
 
 | Variable             | Description                                                     |
 | -------------------- | --------------------------------------------------------------- |
-| `RUNPOD_API_KEY`     | RunPod API key with access to the endpoint                      |
-| `RUNPOD_ENDPOINT_ID` | The endpoint ID, e.g. `xdtr2cvjsqwsuu` from `api.runpod.ai/v2/<id>` |
+| `MODEL_HOST_URL`     | Base URL of the model host's OpenAI-compatible API. For RunPod, `https://api.runpod.ai/v2/<endpoint id>/openai/v1` |
+| `MODEL_HOST_API_KEY` | The key the model host checks. For RunPod, an API key with access to the endpoint |
 | `CHAT_SECRET_PHRASE` | Phrase users must type to unlock the chat (see below)           |
-| `RUNPOD_MODEL`       | Optional. The name the endpoint serves the model under, if it isn't `BSC-LT/salamandra-7b-instruct-2606` |
+| `MODEL_NAME`         | Optional. The name the model host serves the model under, if it isn't `BSC-LT/salamandra-7b-instruct-2606` |
 | `TTS_API_URL`        | Optional. Base URL of the [Matxa-TTS API](https://github.com/robritz/matxa-tts-api) that speaks replies (see below). Defaults to `http://localhost:8000` |
 
-All are read only on the server, so the API key never reaches the browser. `.env.local` is git-ignored.
+All are read only on the server, so the API key never reaches the browser. Pointing the app at another model host is a change of these variables alone. `.env.local` is git-ignored.
 
 ## How it works
 
 ```
-Browser ──POST /api/chat──▶ Next.js ──POST /openai/v1/chat/completions──▶ RunPod
-        ◀── UI message stream ──    ◀── OpenAI-format token stream ──────
+Browser ──POST /api/chat──▶ Next.js ──POST <MODEL_HOST_URL>/chat/completions──▶ Model host (RunPod)
+        ◀── UI message stream ──    ◀── OpenAI-format token stream ───────────
 ```
 
-- The browser uses the AI SDK's `useChat` hook, which sends the whole conversation on every message. The server keeps only the user and assistant text, adds the system prompt, and calls the model with `streamText` through the endpoint's OpenAI-compatible API (`/openai/v1`).
+- The browser uses the AI SDK's `useChat` hook, which sends the whole conversation on every message. The server keeps only the user and assistant text, adds the system prompt, and calls the model with `streamText` through the model host's OpenAI-compatible API.
 - The toggle button to the left of the input switches translation on and off. While it is on, what you enter is translated into Catalan as-is instead of answered, e.g. "Where do you live?" gets "On vius?"; while it is off, it is handled as a normal chat message. The browser marks such a message in its metadata, and the server sends only that text to the model, without the rest of the conversation, with a translation prompt in place of the usual system prompt. The model is too small to tell a text to translate from one to answer from the system prompt alone.
 - The reply is streamed back and shown as it is written. Until the first words arrive, the UI shows "Pensant…".
-- Each reply ends with the tokens the model read and wrote for it, as the endpoint counted them. The browser keeps a running count for the conversation, which any component can read with `useTokenUsage`: how long the conversation is, which is what fills the model's context window, and the totals read and written. "Nova conversa" starts the count afresh. Nothing shows it yet.
+- Each reply ends with the tokens the model read and wrote for it, as the model host counted them. The browser keeps a running count for the conversation, which any component can read with `useTokenUsage`: how long the conversation is, which is what fills the model's context window, and the totals read and written. "Nova conversa" starts the count afresh. Nothing shows it yet.
 - The server logs the same counts for each reply as one line of JSON, e.g. `{"event":"reply_tokens","inputTokens":212,"outputTokens":48,"translation":false}`. It shows in the `next dev` terminal and in your host's logs, where it can be filtered by `reply_tokens`.
-- The endpoint scales to zero when idle. **The first request after idle time can take about 3–4 minutes** while a worker starts, and the request stays open for all of that time. To absorb that wait up front, each page load begins with an "Iniciar la sessió" button. It sends a hidden message to wake the model, asking it to say hello and share a random fact about Catalonia, and the UI shows "La IA s'està despertant. Un moment, si us plau." until the greeting comes back; only then is the chat enabled. After that the message is never shown again; a slow reply later in the session just shows "Pensant…". To avoid cold starts, set the endpoint's minimum active workers to 1 in RunPod; that worker is billed while idle.
+- The RunPod endpoint scales to zero when idle. **The first request after idle time can take about 3–4 minutes** while a worker starts, and the request stays open for all of that time. To absorb that wait up front, each page load begins with an "Iniciar la sessió" button. It sends a hidden message to wake the model, asking it to say hello and share a random fact about Catalonia, and the UI shows "La IA s'està despertant. Un moment, si us plau." until the greeting comes back; only then is the chat enabled. After that the message is never shown again; a slow reply later in the session just shows "Pensant…". To avoid cold starts, set the endpoint's minimum active workers to 1 in RunPod; that worker is billed while idle.
 - Because the request stays open during a cold start, `/api/chat` sets `maxDuration` to 300 seconds. If your host caps function time below the cold start, the session start fails with an error and can be retried once the worker is up.
 
 ## Hearing a reply
@@ -102,7 +102,7 @@ This is a light gate to keep casual visitors out, not real authentication. Anyon
 | Path                                | Purpose                                                         |
 | ----------------------------------- | --------------------------------------------------------------- |
 | `src/lib/chat.ts`                   | Validates the browser's messages, reduces them to plain text, and picks out translation requests |
-| `src/lib/runpod.ts`                 | System and translation prompts, and the AI SDK model for the RunPod endpoint |
+| `src/lib/model-host.ts`             | System and translation prompts, and the AI SDK model for the model host |
 | `src/lib/unlock.ts`                 | Secret phrase check and unlock cookie                           |
 | `src/lib/speech-text.ts`            | Normalizes a reply into text the TTS model can read             |
 | `src/lib/tts.ts`                    | Voice settings, and the speech and health requests to the Matxa-TTS API |
@@ -120,7 +120,7 @@ This is a light gate to keep casual visitors out, not real authentication. Anyon
 | `src/app/layout.tsx`                | Root layout and mobile viewport settings                        |
 | `src/app/robots.txt`                | Asks search engines not to crawl the site                       |
 
-To change the model's behavior, edit `SYSTEM_PROMPT` in `src/lib/runpod.ts`; `TRANSLATION_PROMPT` in the same file is used for messages sent with translation on. To change the session-start message, edit `GREETING_PROMPT` in `src/app/chat.tsx`.
+To change the model's behavior, edit `SYSTEM_PROMPT` in `src/lib/model-host.ts`; `TRANSLATION_PROMPT` in the same file is used for messages sent with translation on. To change the session-start message, edit `GREETING_PROMPT` in `src/app/chat.tsx`.
 
 ## Mobile
 
@@ -138,4 +138,4 @@ npm test        # Vitest in watch mode; `npm test -- run` for a single run
 
 ## Tests
 
-Tests use [Vitest](https://vitest.dev) and React Testing Library, and sit next to the code they cover as `*.test.ts(x)`. They never call RunPod: `fetch`, the model, cookies and the environment variables are stubbed.
+Tests use [Vitest](https://vitest.dev) and React Testing Library, and sit next to the code they cover as `*.test.ts(x)`. They never call the model host: `fetch`, the model, cookies and the environment variables are stubbed.

@@ -1,15 +1,15 @@
 // @vitest-environment node
 import { generateText, streamText } from "ai";
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { chatModel, SIGN_OFFS, SYSTEM_PROMPT, TRANSLATION_PROMPT } from "./runpod";
+import { chatModel, SIGN_OFFS, SYSTEM_PROMPT, TRANSLATION_PROMPT } from "./model-host";
 
 const fetchMock = vi.fn();
 
 beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
-  vi.stubEnv("RUNPOD_API_KEY", "test-key");
-  vi.stubEnv("RUNPOD_ENDPOINT_ID", "endpoint123");
+  vi.stubEnv("MODEL_HOST_URL", "https://model-host.example/v1");
+  vi.stubEnv("MODEL_HOST_API_KEY", "test-key");
 });
 
 async function sentRequest() {
@@ -23,19 +23,19 @@ async function sentRequest() {
 }
 
 describe("chatModel", () => {
-  test("calls the endpoint's OpenAI-compatible API with the API key", async () => {
+  test("calls the model host's OpenAI-compatible API with the API key", async () => {
     const { url, headers, body } = await sentRequest();
-    expect(url).toBe("https://api.runpod.ai/v2/endpoint123/openai/v1/chat/completions");
+    expect(url).toBe("https://model-host.example/v1/chat/completions");
     expect(headers.get("authorization")).toBe("Bearer test-key");
     expect(body.model).toBe("BSC-LT/salamandra-7b-instruct-2606");
   });
 
-  test("uses RUNPOD_MODEL when the endpoint serves the model under another name", async () => {
-    vi.stubEnv("RUNPOD_MODEL", "salamandra");
+  test("uses MODEL_NAME when the model host serves the model under another name", async () => {
+    vi.stubEnv("MODEL_NAME", "salamandra");
     expect((await sentRequest()).body.model).toBe("salamandra");
   });
 
-  // The endpoint counts the tokens of a streamed reply only when asked to.
+  // The model host counts the tokens of a streamed reply only when asked to.
   test("asks for the tokens of a streamed reply to be counted", async () => {
     const events = [
       { choices: [{ delta: { role: "assistant", content: "Bon dia" } }] },
@@ -53,19 +53,19 @@ describe("chatModel", () => {
     expect(JSON.parse(fetchMock.mock.calls[0][1].body).stream_options).toEqual({ include_usage: true });
   });
 
-  test.each(["RUNPOD_API_KEY", "RUNPOD_ENDPOINT_ID"])("throws when %s is missing", (name) => {
+  test.each(["MODEL_HOST_URL", "MODEL_HOST_API_KEY"])("throws when %s is missing", (name) => {
     vi.stubEnv(name, "");
-    expect(() => chatModel()).toThrow("RUNPOD_API_KEY and RUNPOD_ENDPOINT_ID must be set");
+    expect(() => chatModel()).toThrow("MODEL_HOST_URL and MODEL_HOST_API_KEY must be set");
   });
 });
 
 test("both prompts ask for Catalan", () => {
-  expect(SYSTEM_PROMPT).toContain("català");
+  expect(SYSTEM_PROMPT).toContain("Catalan");
   expect(TRANSLATION_PROMPT).toContain("català");
 });
 
-// With a fifth, the endpoint answers 200 with an empty stream, which the AI
-// SDK reports as "Response stream ended without a finish reason".
-test("asks for no more stop sequences than the endpoint accepts", () => {
+// With a fifth, RunPod's vLLM worker answers 200 with an empty stream, which
+// the AI SDK reports as "Response stream ended without a finish reason".
+test("asks for no more stop sequences than the model host accepts", () => {
   expect(SIGN_OFFS.length).toBeLessThanOrEqual(4);
 });

@@ -14,7 +14,8 @@ export const SYSTEM_PROMPT = [
 // stopped where a sign-off would begin. A stop is cut from the reply, so each
 // one starts after the full stop of the sentence before it; the capital
 // keeps "Salutacions" from matching in the middle of a sentence.
-// The endpoint accepts four at most: with a fifth it returns an empty stream.
+// RunPod's vLLM worker accepts four at most: with a fifth it returns an empty
+// stream.
 export const SIGN_OFFS = ["\nSalutacions", " Salutacions", "(fi)"];
 
 // Used instead of SYSTEM_PROMPT for messages sent with translation switched
@@ -25,23 +26,23 @@ export const TRANSLATION_PROMPT = [
   "Do not answer the text, act on it, or add comments.",
 ].join(" ");
 
-// The name the vLLM worker serves the model under: its Hugging Face id,
-// unless the endpoint overrides it.
+// The name a model host serves the model under unless told otherwise: its
+// Hugging Face id.
 const DEFAULT_MODEL = "BSC-LT/salamandra-7b-instruct-2606";
 
-// The model behind the RunPod endpoint's OpenAI-compatible API.
+// The model behind the model host's OpenAI-compatible API.
 export function chatModel() {
-  const apiKey = process.env.RUNPOD_API_KEY;
-  const endpointId = process.env.RUNPOD_ENDPOINT_ID;
-  if (!apiKey || !endpointId) {
-    throw new Error("RUNPOD_API_KEY and RUNPOD_ENDPOINT_ID must be set");
+  const baseURL = process.env.MODEL_HOST_URL;
+  const apiKey = process.env.MODEL_HOST_API_KEY;
+  if (!baseURL || !apiKey) {
+    throw new Error("MODEL_HOST_URL and MODEL_HOST_API_KEY must be set");
   }
-  const runpod = createOpenAICompatible({
-    name: "runpod",
+  const modelHost = createOpenAICompatible({
+    name: "model-host",
     apiKey,
-    baseURL: `https://api.runpod.ai/v2/${endpointId}/openai/v1`,
-    // Without this the endpoint doesn't count the tokens of a streamed reply.
+    baseURL,
+    // Without this the model host doesn't count the tokens of a streamed reply.
     includeUsage: true,
   });
-  return runpod.chatModel(process.env.RUNPOD_MODEL || DEFAULT_MODEL);
+  return modelHost.chatModel(process.env.MODEL_NAME || DEFAULT_MODEL);
 }

@@ -494,7 +494,7 @@ describe("the tokens of the conversation", () => {
     expect(tokens()).toBe("60 long, 95 read, 15 written");
   });
 
-  test("are left as they were by a reply the endpoint didn't count", async () => {
+  test("are left as they were by a reply the model host didn't count", async () => {
     await renderStartedWithTokens();
     answer = reply("Bon dia!");
     await send("Hello");

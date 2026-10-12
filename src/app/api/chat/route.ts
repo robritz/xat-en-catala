@@ -1,6 +1,6 @@
 import { createUIMessageStreamResponse, streamText, toUIMessageStream } from "ai";
 import { toModelMessages, translationRequest } from "@/lib/chat";
-import { chatModel, SIGN_OFFS, SYSTEM_PROMPT, TRANSLATION_PROMPT } from "@/lib/runpod";
+import { chatModel, SIGN_OFFS, SYSTEM_PROMPT, TRANSLATION_PROMPT } from "@/lib/model-host";
 import type { ReplyUsage } from "@/lib/token-usage";
 import { isUnlocked } from "@/lib/unlock";
 
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
         stream: result.stream,
         // Don't leak upstream details to the browser.
         onError: () => "Upstream error",
-        // Nothing is said of a reply the endpoint didn't count the tokens of.
+        // Nothing is said of a reply the model host didn't count the tokens of.
         messageMetadata: ({ part }) => {
           if (part.type !== "finish") return undefined;
           const { inputTokens, outputTokens } = part.totalUsage;
