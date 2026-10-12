@@ -29,3 +29,11 @@ _Avoid_: Thread, history
 
 **Session**:
 The period from the model being woken on page load until the page is closed.
+
+**Cold start**:
+The wait from a message reaching the model while nothing is running to serve it until the first word of the reply.
+_Avoid_: Warm-up, boot time, spin-up
+
+**Model host**:
+A service that runs the model and answers the chat's requests to it.
+_Avoid_: Endpoint, backend, provider, inference server
