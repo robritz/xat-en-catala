@@ -102,6 +102,9 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
   const [started, setStarted] = useState(false);
   // While on, what the user enters is translated as-is instead of answered.
   const [translating, setTranslating] = useState(false);
+  // The reply the model stopped writing because its context window was full.
+  // The model host cuts such a reply mid-sentence and reports no error.
+  const [cutShortId, setCutShortId] = useState<string | null>(null);
   const { messages, sendMessage, setMessages, status, error, clearError } =
     useChat<ChatMessage>({
       // The session has started once the model has answered the greeting.
@@ -113,9 +116,6 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
       },
     });
   const loading = status === "submitted" || status === "streaming";
-  // The reply the model stopped writing because its context window was full.
-  // The model host cuts such a reply mid-sentence and reports no error.
-  const [cutShortId, setCutShortId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
