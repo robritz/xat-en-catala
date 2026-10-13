@@ -3,6 +3,13 @@
 #
 # _TAG has no default, so that an image is never pushed under a tag nobody
 # chose: by hand it is the commit the image was built from.
+#
+# Each build also pushes the image as "latest", and the next build reads that
+# as its cache. While the engine and the weights stay the same, the weights
+# layer is then taken from the image before and not made again, so its digest
+# does not change and a deploy moves no weights. Without the cache, the builder
+# here gives that layer a new digest on every build. The first build has no
+# cache to read, which it warns of and carries on.
 
 substitutions:
   _REPOSITORY: model-host
@@ -17,12 +24,20 @@ steps:
       - build
       - --build-arg
       - WEIGHTS_IMAGE=${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/weights:${_WEIGHTS_TAG}
+      - --cache-from
+      - ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/service:latest
+      # Writes into the image what the next build needs to use it as a cache.
+      - --build-arg
+      - BUILDKIT_INLINE_CACHE=1
       - --tag
       - ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/service:${_TAG}
+      - --tag
+      - ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/service:latest
       - .
 
 images:
   - ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/service:${_TAG}
+  - ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/service:latest
 
 timeout: 1800s
 

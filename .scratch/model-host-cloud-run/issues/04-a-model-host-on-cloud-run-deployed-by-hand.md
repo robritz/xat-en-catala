@@ -59,6 +59,16 @@ It is well under 60 seconds, so there is nothing to report to the owner under th
 - **Idle.** The instance shut down by itself at 09:01:57, ten minutes after its last request at 08:51:42.
 - **The service's settings**, read back from Cloud Run: at most one instance, CPU always allocated, zonal redundancy off.
 
-### Left open
+### The weights layer's digest
 
-Rebuilding after a flag change and comparing the weights layer's digest has not been done in Cloud Build, since no flag has needed changing. Built locally with stand-in images, the layer's digest stayed the same.
+Checked on 2026-10-13 and **it failed**. Three builds of the image in Cloud Build gave the 6.35 GB weights layer three digests, one of them a rebuild with nothing changed:
+
+| Image | Built (UTC) | Weights layer |
+| --- | --- | --- |
+| `service:5a35510` | 08:33 | `sha256:93d09ca371f2…` |
+| untagged | 09:20 | `sha256:5280017e7033…` |
+| `service:digest-check`, with `--metrics` added | 09:44 | `sha256:cc2d3eaa653b…` |
+
+The thirteen layers of the engine image were the same in all three. The weights layer differs before compression too, so the builder in Cloud Build stamps something in it with the time of the build. Copying the directory whole, which kept the digest steady on a newer local Docker, does not on Cloud Build's.
+
+**The fix, not yet verified:** `model/cloudbuild.yaml` now pushes each image as `service:latest` as well and gives it to the next build as a cache, so that the layer is taken from the image before and not made again. It needs two builds to show it: one to leave a cache behind, and one with a flag changed, whose weights layer should then carry the digest of the first. The box stays open until that is seen.

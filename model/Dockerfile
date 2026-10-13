@@ -11,10 +11,10 @@ FROM ${WEIGHTS_IMAGE} AS weights
 # The official server-cuda image, build b11561.
 FROM ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:20c6e722e2fcc5ca9c15401d3fd8e35408aaf8f9c54a12f32920f637c57959bb
 
-# The weights sit in a layer of their own, before anything that changes often.
-# The directory is copied whole, not the file alone: a directory made for a
-# copied file is stamped with the time of the build, which would give the layer
-# a new digest on every build and move 6.4 GB with every deploy.
+# The weights sit in a layer of their own, before anything that changes often,
+# so that a build which changes only the flags below can take the layer from
+# the image before it. model/cloudbuild.yaml sees to that with a cache; built
+# afresh, the layer gets a new digest and a deploy moves 6.4 GB.
 COPY --from=weights /models /models
 
 # The image's entrypoint is the server, which already listens on port 8080 on
