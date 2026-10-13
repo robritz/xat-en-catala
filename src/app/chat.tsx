@@ -102,12 +102,16 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
   const [started, setStarted] = useState(false);
   // While on, what the user enters is translated as-is instead of answered.
   const [translating, setTranslating] = useState(false);
+  // The reply the model stopped writing because its context window was full.
+  // The model host cuts such a reply mid-sentence and reports no error.
+  const [cutShortId, setCutShortId] = useState<string | null>(null);
   const { messages, sendMessage, setMessages, status, error, clearError } =
     useChat<ChatMessage>({
       // The session has started once the model has answered the greeting.
-      onFinish: ({ message, isAbort, isDisconnect, isError }) => {
+      onFinish: ({ message, isAbort, isDisconnect, isError, finishReason }) => {
         if (isAbort || isDisconnect || isError) return;
         setStarted(true);
+        if (finishReason === "length") setCutShortId(message.id);
         if (message.metadata?.usage) recordReplyUsage(message.metadata.usage);
       },
     });
@@ -526,6 +530,12 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
           )}
           {error && (
             <p className="text-center text-sm text-red-600">Error: {error.message}</p>
+          )}
+          {/* Only while that reply is the newest: a later one came out whole. */}
+          {cutShortId !== null && messages.at(-1)?.id === cutShortId && (
+            <p className="text-center text-sm text-red-600">
+              La resposta s&apos;ha tallat perquè la conversa és massa llarga. Comença&apos;n una de nova.
+            </p>
           )}
           <div ref={bottomRef} />
         </main>

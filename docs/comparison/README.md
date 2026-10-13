@@ -7,6 +7,7 @@ A fixed set of messages for telling whether one **model host** answers as well a
 | `messages.json` | The messages. Each records whether it is sent as chat or as a translation, and what it is there to cover |
 | `replay.mjs` | Sends the set to a running copy of the app and prints the replies as Markdown |
 | `baseline-runpod.md` | RunPod's replies, taken on 2026-10-12 with the app sending a temperature of 1 and a top-p of 1 |
+| `replies-cloud-run.md` | Cloud Run's replies, taken on 2026-10-13 from the first run against it, to be read beside the baseline |
 
 ## Replaying the set against a host
 

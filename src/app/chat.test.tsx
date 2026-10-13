@@ -6,6 +6,7 @@ import Chat from "./chat";
 
 const GREETING = "say hello and include a random fact about catalonia.";
 const START_BUTTON = "Iniciar la sessió";
+const CUT_SHORT = "La resposta s'ha tallat perquè la conversa és massa llarga. Comença'n una de nova.";
 const WAKE_MESSAGE = "La IA s'està despertant. Un moment, si us plau.";
 const LISTEN_BUTTON = "Escolta";
 const MUTE_BUTTON = "Silencia";
@@ -64,6 +65,21 @@ function reply(text: string, usage?: ReplyUsage) {
         writer.write({ type: "text-delta", id: "t", delta: text });
         writer.write({ type: "text-end", id: "t" });
         writer.write({ type: "finish", messageMetadata: usage && { usage } });
+      },
+    }),
+  });
+}
+
+// A reply the model had to stop writing, for want of room in its context window.
+function cutShort(text: string) {
+  return createUIMessageStreamResponse({
+    stream: createUIMessageStream({
+      execute({ writer }) {
+        writer.write({ type: "start" });
+        writer.write({ type: "text-start", id: "t" });
+        writer.write({ type: "text-delta", id: "t", delta: text });
+        writer.write({ type: "text-end", id: "t" });
+        writer.write({ type: "finish", finishReason: "length" });
       },
     }),
   });
@@ -423,6 +439,36 @@ describe("chatting", () => {
     await send("Hello");
 
     expect(screen.getByText("Error: Upstream error")).toBeDefined();
+  });
+
+  test("says so when a reply was cut short for want of room", async () => {
+    await renderStarted();
+    answer = cutShort("Hi havia una vegada un");
+
+    await send("Explica'm un conte");
+
+    expect(screen.getByText("Hi havia una vegada un")).toBeDefined();
+    expect(screen.getByText(CUT_SHORT)).toBeDefined();
+  });
+
+  test("says nothing of the kind under a reply that ended by itself", async () => {
+    await renderStarted();
+    answer = reply("Bon dia!");
+
+    await send("Hello");
+
+    expect(screen.queryByText(CUT_SHORT)).toBeNull();
+  });
+
+  test("stops saying a reply was cut short once a later one is whole", async () => {
+    await renderStarted();
+    answer = cutShort("Hi havia una vegada un");
+    await send("Explica'm un conte");
+    answer = reply("Bon dia!");
+
+    await send("Hello");
+
+    expect(screen.queryByText(CUT_SHORT)).toBeNull();
   });
 
   test("ignores blank input", async () => {
