@@ -1,10 +1,14 @@
 # 06 — A merge deploys the model host
 
-**What to build:** A merge to `main` that touches the model directory deploys the **model host**, with no traffic at first. The build sends the new revision one test **message**, logs the **cold start**, and promotes the revision only if a **reply** began within 60 seconds. Otherwise the build fails and the previous revision keeps serving.
+**What to build:** A merge to `main` that touches the model directory puts a new revision of the **model host** into service without anyone's involvement, and only if it works. The pipeline builds the service image, deploys it as a revision that receives no traffic, sends that revision one test **message**, times the **reply**, and sends traffic to it only if a reply came back within 60 seconds. Otherwise the build fails and the previous revision keeps serving.
 
-The pipeline is a Cloud Build trigger created by the bootstrap script from ticket 03. See `docs/specs/model-host-cloud-run.md`, section "The pipeline".
+The test message doubles as a measurement: every deploy logs the **cold start** it saw, so the number can be watched as the image changes.
 
-**Needs the owner:** Connecting this repository to Cloud Build is approved once in the browser, before the trigger can be created. Tell the owner exactly where to click and wait for them.
+The pipeline is a Cloud Build trigger on this repository running a checked-in build configuration, matching how the project's other service deploys. The trigger is created by the bootstrap script from ticket 03.
+
+See `docs/specs/model-host-cloud-run.md`, section "The pipeline".
+
+**Needs the owner:** Giving the Cloud Build GitHub app access to this repository is done once in the browser, before the trigger can be created. Tell the owner exactly where to click and wait for them.
 
 **Blocked by:** 04 — A model host on Cloud Run, deployed by hand.
 
