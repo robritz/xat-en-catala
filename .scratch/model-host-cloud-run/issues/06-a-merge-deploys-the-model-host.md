@@ -23,7 +23,7 @@ See `docs/specs/model-host-cloud-run.md`, section "The pipeline".
 - [x] A reply within 60 seconds sends all traffic to the new revision. No reply, an error, or a reply after 60 seconds fails the build and leaves traffic where it was.
 - [x] The failure path has been seen to work: a deliberately broken revision fails the build and the previous revision still answers.
 - [x] The result of the build shows as a check on the commit in GitHub.
-- [ ] Going back to the previous revision is one documented command, and it has been run once to confirm it.
+- [x] Going back to the previous revision is one documented command, and it has been run once to confirm it.
 - [x] The README describes what a merge does, where to read the cold start, and how to go back.
 
 ## Outcome
@@ -54,8 +54,11 @@ The pipeline was run by hand as build `fe3e96b9`, under the tag `broken-test`, w
 
 Traffic stayed with `model-host-00002-soc`, and a message to the service afterwards got a reply in Catalan, after a cold start of 13.6 seconds. The broken revision is still listed as ready, because no instance is started at deploy, and it still holds the tag `candidate` until the next deploy moves it. It also pushed `service:latest`, which the next build reads only as a cache. There is no revision `00003`.
 
+### Going back
+
+The owner ran the README's command on 2026-10-14 and sent all traffic to `model-host-00001-2cz`. A message then got a 200 from that revision, at 15:59 UTC after 14.0 seconds, a cold start. Traffic was then sent back to `model-host-00002-soc` the same way. Nothing was rebuilt.
+
 ### Still open
 
 - **A second run of the script** has not been checked for a second trigger.
 - **A merge that leaves `model/` alone** has not yet been seen to start no build.
-- **Going back** has not been run. The command is in the README.
