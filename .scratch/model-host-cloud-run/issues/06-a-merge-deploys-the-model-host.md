@@ -25,3 +25,9 @@ See `docs/specs/model-host-cloud-run.md`, section "The pipeline".
 - [ ] The result of the build shows as a check on the commit in GitHub.
 - [ ] Going back to the previous revision is one documented command, and it has been run once to confirm it.
 - [ ] The README describes what a merge does, where to read the cold start, and how to go back.
+
+## Progress
+
+Written on 2026-10-14 and not yet run against the cloud: the bootstrap script now creates a Developer Connect connection to GitHub in `europe-west4`, a link to this repository and the trigger `model-host-deploy`, and gives the pipeline's account the key and a read token for the repository. `model/cloudbuild.yaml` builds, pushes, deploys with `model/deploy.sh --candidate`, tries the revision with `model/try-revision.mjs`, and promotes it. The Developer Connect app is the one the TTS service already deploys through, and its commits carry a check from it.
+
+Every box is open until the owner has approved the connection, run the script twice, merged a change to `model/`, tried a broken revision and gone back once.

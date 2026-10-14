@@ -1,17 +1,20 @@
 #!/usr/bin/env bash
 #
 # Deploys a service image as the model host on Cloud Run. Every setting of the
-# service is here. It starts a GPU instance, which is billed while it runs.
+# service is here.
 #
 #   model/deploy.sh IMAGE
 #
-# To build the image first, from the repository root:
+# deploys the image and sends all traffic to it. It starts a GPU instance,
+# which is billed while it runs, and the deploy fails, leaving traffic where it
+# was, if the instance does not pass its startup probe.
 #
-#   gcloud builds submit model --config model/cloudbuild.yaml \
-#     --project <project> --region europe-west4 \
-#     --service-account projects/<project>/serviceAccounts/model-host-pipeline@<project>.iam.gserviceaccount.com \
-#     --gcs-source-staging-dir gs://<project>-model-weights/source \
-#     --substitutions _TAG=$(git rev-parse --short HEAD)
+#   model/deploy.sh --candidate IMAGE
+#
+# is what model/cloudbuild.yaml runs on a merge. It deploys the image as a
+# revision that takes no traffic, reachable under the tag "candidate", and
+# starts no instance: the first request to the tag's URL does, so the pipeline
+# can time a real cold start. The pipeline sends traffic to it afterwards.
 
 set -euo pipefail
 
@@ -22,11 +25,22 @@ SERVICE="model-host"
 SERVICE_EMAIL="model-host@${PROJECT}.iam.gserviceaccount.com"
 SECRET="model-host-api-key"
 
+candidate=false
+if [ "${1:-}" = "--candidate" ]; then
+  candidate=true
+  shift
+fi
 if [ $# -ne 1 ]; then
-  echo "Usage: model/deploy.sh IMAGE" >&2
+  echo "Usage: model/deploy.sh [--candidate] IMAGE" >&2
   exit 1
 fi
 image="$1"
+
+if [ "${candidate}" = true ]; then
+  candidate_flags=(--no-traffic --tag candidate --no-deploy-health-check)
+else
+  candidate_flags=()
+fi
 
 command -v gcloud >/dev/null || PATH="${HOME}/google-cloud-sdk/bin:${PATH}"
 
@@ -61,4 +75,14 @@ gcloud run deploy "${SERVICE}" \
   --timeout 300 \
   --port 8080 \
   --set-secrets "LLAMA_API_KEY=${SECRET}:latest" \
-  --startup-probe "httpGet.path=/health,httpGet.port=8080,periodSeconds=1,timeoutSeconds=1,failureThreshold=240"
+  --startup-probe "httpGet.path=/health,httpGet.port=8080,periodSeconds=1,timeoutSeconds=1,failureThreshold=240" \
+  ${candidate_flags[@]+"${candidate_flags[@]}"}
+
+# Once the pipeline has sent traffic to a revision by name, a new revision gets
+# none until it is told to, so a deploy by hand says so.
+if [ "${candidate}" = false ]; then
+  gcloud run services update-traffic "${SERVICE}" \
+    --project "${PROJECT}" \
+    --region "${REGION}" \
+    --to-latest
+fi
