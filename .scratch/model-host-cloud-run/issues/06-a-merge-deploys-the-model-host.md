@@ -15,7 +15,7 @@ See `docs/specs/model-host-cloud-run.md`, section "The pipeline".
 **Status:** ready-for-agent
 
 - [ ] The bootstrap script creates a trigger for pushes to `main` that change anything under the model directory, running as the pipeline's own service account. Running the script again does not create a second trigger.
-- [ ] A merge that touches the model directory starts a build. A merge that does not starts none.
+- [x] A merge that touches the model directory starts a build. A merge that does not starts none.
 - [x] The build tags the service image with the commit SHA and reuses the weights layer: the build log shows the weights are not fetched or pushed again.
 - [x] The new revision is deployed with no traffic, through the same deploy script that ticket 04 runs by hand.
 - [x] The build sends the untrafficked revision one message with the key and waits for the first word of the reply. The key is read from Secret Manager and is not written to the log.
@@ -58,7 +58,10 @@ Traffic stayed with `model-host-00002-soc`, and a message to the service afterwa
 
 The owner ran the README's command on 2026-10-14 and sent all traffic to `model-host-00001-2cz`. A message then got a 200 from that revision, at 15:59 UTC after 14.0 seconds, a cold start. Traffic was then sent back to `model-host-00002-soc` the same way. Nothing was rebuilt.
 
+### A merge that leaves model/ alone
+
+Pull request #29, which changed only `.scratch/`, was merged on 2026-10-14 as `dabf392`, and no build started. The trigger still reports on the commit in GitHub, as a neutral check rather than a pass or a fail.
+
 ### Still open
 
 - **A second run of the script** has not been checked for a second trigger.
-- **A merge that leaves `model/` alone** has not yet been seen to start no build.
