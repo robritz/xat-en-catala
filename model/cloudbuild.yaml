@@ -1,8 +1,15 @@
-# Builds the model host's service image and pushes it. The source is this
-# directory. Run by hand for now, as model/deploy.sh's comment shows.
+# The pipeline of the model host. A merge to main that changes model/ runs it,
+# through the trigger model/bootstrap.sh creates; it can also be run by hand,
+# as the README shows. The source is the whole repository.
 #
-# _TAG has no default, so that an image is never pushed under a tag nobody
-# chose: by hand it is the commit the image was built from.
+# It builds the service image, deploys it as a revision that takes no traffic,
+# sends that revision one message, and sends traffic to it only if the first
+# word of the reply came within 60 seconds. Otherwise the build fails and the
+# revision serving before it keeps serving.
+#
+# The image is tagged with the commit it was built from. A trigger knows the
+# commit; a build run by hand is given it as _TAG, and without one the build
+# fails, so that an image is never pushed under a tag nobody chose.
 #
 # Each build also pushes the image as "latest", and the next build reads that
 # as its cache. While the engine and the weights stay the same, the weights
@@ -13,11 +20,15 @@
 
 substitutions:
   _REPOSITORY: model-host
+  _SERVICE: model-host
   _WEIGHTS_TAG: Q6_K-8bcd7d8d8545749ef73b3046f7cb5cd64d8c70c1
+  _TAG: ${SHORT_SHA}
+  _IMAGE: ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/service
 
 steps:
   - id: build the service image
     name: gcr.io/cloud-builders/docker
+    dir: model
     env:
       - DOCKER_BUILDKIT=1
     args:
@@ -25,22 +36,78 @@ steps:
       - --build-arg
       - WEIGHTS_IMAGE=${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/weights:${_WEIGHTS_TAG}
       - --cache-from
-      - ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/service:latest
+      - ${_IMAGE}:latest
       # Writes into the image what the next build needs to use it as a cache.
       - --build-arg
       - BUILDKIT_INLINE_CACHE=1
       - --tag
-      - ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/service:${_TAG}
+      - ${_IMAGE}:${_TAG}
       - --tag
-      - ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/service:latest
+      - ${_IMAGE}:latest
       - .
 
+  # Pushed now and not at the end, because the next step deploys it.
+  - id: push the service image
+    name: gcr.io/cloud-builders/docker
+    args: [push, --all-tags, "${_IMAGE}"]
+
+  # The revision's name and its tag's URL are left in a file for the steps
+  # after this one.
+  - id: deploy it with no traffic
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        model/deploy.sh --candidate "${_IMAGE}:${_TAG}"
+        gcloud run services describe "${_SERVICE}" \
+          --project "${PROJECT_ID}" --region "${LOCATION}" --format json |
+          python3 -c '
+        import json, sys
+        traffic = json.load(sys.stdin)["status"]["traffic"]
+        candidate = next(t for t in traffic if t.get("tag") == "candidate")
+        print(candidate["revisionName"], candidate["url"])
+        ' > /workspace/candidate
+
+  # Writes the cold start to the log as one line of JSON, whether or not it
+  # passes. The key reaches the step as a variable and is never printed.
+  - id: send it one message
+    name: node:22-slim
+    entrypoint: bash
+    secretEnv: [MODEL_HOST_API_KEY]
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        read -r revision url < /workspace/candidate
+        node model/try-revision.mjs "$$url" "$$revision"
+
+  - id: send traffic to it
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        read -r revision url < /workspace/candidate
+        gcloud run services update-traffic "${_SERVICE}" \
+          --project "${PROJECT_ID}" --region "${LOCATION}" \
+          --to-revisions "$$revision=100"
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/${PROJECT_ID}/secrets/model-host-api-key/versions/latest
+      env: MODEL_HOST_API_KEY
+
 images:
-  - ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/service:${_TAG}
-  - ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/service:latest
+  - ${_IMAGE}:${_TAG}
+  - ${_IMAGE}:latest
 
 timeout: 1800s
 
 options:
+  # Lets _TAG and _IMAGE be made from other substitutions.
+  dynamicSubstitutions: true
   # A build that runs as its own service account has to say where its logs go.
   logging: CLOUD_LOGGING_ONLY

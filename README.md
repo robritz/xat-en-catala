@@ -59,16 +59,18 @@ A second model host is being built on Google Cloud Run, to bring the cold start 
 - a Docker repository in Artifact Registry, `model-host`;
 - a bucket, `<project>-model-weights`, private and in the same region;
 - a service account for the service, `model-host`, which can read the API key and nothing else;
-- a service account for the pipeline, `model-host-pipeline`, which can push images to the repository, deploy to Cloud Run as the service's account, write build logs, and read the bucket;
+- a service account for the pipeline, `model-host-pipeline`, which can push images to the repository, deploy to Cloud Run as the service's account, read the API key, fetch this repository from GitHub, write build logs, and read the bucket;
 - a secret in Secret Manager, `model-host-api-key`, holding a key the script generates. The key is never shown. To read it, for the app's `MODEL_HOST_API_KEY`, run `gcloud secrets versions access latest --secret model-host-api-key`.
 
 It then mirrors the weights into the bucket, so that no build depends on Hugging Face: the Q6_K quantisation of the model, 6.38 GB, from [`mradermacher/salamandra-7b-instruct-2606-GGUF`](https://huggingface.co/mradermacher/salamandra-7b-instruct-2606-GGUF) at a pinned revision. The file is downloaded to a temporary directory, its SHA-256 is checked against the value in the script, and it is uploaded only if they match.
+
+Last, it creates the trigger that deploys the model host on a merge (see [Deploying on a merge](#deploying-on-a-merge)), and what the trigger needs to read this repository: a connection to GitHub through Developer Connect, `github`, and a link to the repository through it. The connection has to be approved in the browser once. On the first run the script creates it, prints a link to open and what to choose there, and stops; run it again once that is done and it carries on to the trigger.
 
 ```bash
 model/bootstrap.sh
 ```
 
-It needs `gcloud`, signed in as someone who can create these resources, plus `curl` and `openssl`. It can be run again: whatever already exists is left alone, including the key and the weights file. The repository, the bucket and the secret are billed for what they store, which is a few cents a day.
+It needs `gcloud`, with its beta commands, signed in as someone who can create these resources, plus `curl` and `openssl`. It can be run again: whatever already exists is left alone, including the key, the weights file and the trigger. The repository, the bucket and the secret are billed for what they store, which is a few cents a day.
 
 The weights image holds the weights file and nothing else, and the service image will copy the file from it. It is built by hand with the command the script prints when it finishes, once, and again only when the weights change:
 
@@ -92,25 +94,68 @@ Its tag names the quantisation and the revision it holds, as in `weights:Q6_K-8b
 
 The server checks an API key on every request except its health route. It reads the key from `LLAMA_API_KEY`, which Cloud Run sets from Secret Manager, so the key is in no image and no script.
 
-`model/cloudbuild.yaml` builds the image in Cloud Build and pushes it as `service:<tag>`, and again as `service:latest`, which the next build reads as its cache. While the engine and the weights stay the same, the weights layer is taken from that image and not made again, so a deploy that changes a flag moves no weights. From the repository root:
+`model/cloudbuild.yaml` builds the image in Cloud Build and pushes it as `service:<commit>`, and again as `service:latest`, which the next build reads as its cache. While the engine and the weights stay the same, the weights layer is taken from that image and not made again, so a deploy that changes a flag moves no weights. The same build then deploys the image, as the next section describes.
+
+### Deploying on a merge
+
+A merge to `main` that changes anything under `model/` deploys the model host, with nobody involved. A merge that leaves `model/` alone starts nothing. The trigger, `model-host-deploy`, runs `model/cloudbuild.yaml` in Cloud Build as the pipeline's service account, which:
+
+1. builds the service image and pushes it, tagged with the commit;
+2. deploys it with `model/deploy.sh --candidate`, as a revision that takes no traffic, reachable under the tag `candidate`. No instance is started for it;
+3. sends that revision one message, with the key from Secret Manager, through `model/try-revision.mjs`, and waits for the first word of the reply. The revision has never run, so the wait is its cold start;
+4. sends all traffic to the revision, if the first word came within 60 seconds.
+
+No reply, an error, or a first word after 60 seconds fails the build at step 3, and the revision serving before it goes on serving. The result shows on the commit in GitHub as a check named `model-host-deploy`, which links to the build's log.
+
+Every deploy writes the cold start it measured to its build log as one line of JSON, whether it passed or not:
+
+```json
+{"event":"cold_start","revision":"model-host-00002-abc","seconds":10.9,"passed":true}
+```
+
+To read them across deploys:
 
 ```bash
-gcloud builds submit model --config model/cloudbuild.yaml \
+gcloud logging read 'logName="projects/<project>/logs/cloudbuild" AND textPayload:"cold_start"' \
+  --project <project> --format 'value(timestamp,textPayload)'
+```
+
+To run the pipeline by hand, without a merge, from the repository root, which uploads the repository's files less what `.gitignore` leaves out:
+
+```bash
+gcloud builds submit --config model/cloudbuild.yaml \
   --project <project> --region europe-west4 \
   --service-account projects/<project>/serviceAccounts/model-host-pipeline@<project>.iam.gserviceaccount.com \
   --gcs-source-staging-dir gs://<project>-model-weights/source \
   --substitutions _TAG=$(git rev-parse --short HEAD)
 ```
 
+### Going back
+
+Going back to an earlier revision is a switch of traffic; nothing is rebuilt. The revisions, newest first, and the one taking traffic:
+
+```bash
+gcloud run revisions list --service model-host --project <project> --region europe-west4
+```
+
+Then, naming the revision to go back to:
+
+```bash
+gcloud run services update-traffic model-host --project <project> --region europe-west4 \
+  --to-revisions <revision>=100
+```
+
+The next merge that changes `model/` sends traffic to its own revision as usual.
+
 ### Deploying by hand
 
-`model/deploy.sh` holds every setting of the Cloud Run service and takes the image to deploy:
+`model/deploy.sh` holds every setting of the Cloud Run service and takes the image to deploy. Without `--candidate`, it sends all traffic to the new revision:
 
 ```bash
 model/deploy.sh europe-west4-docker.pkg.dev/<project>/model-host/service:<tag>
 ```
 
-The service is `model-host` in `europe-west4`: one NVIDIA L4, 4 CPUs and 16 GiB of memory, billed while an instance is up. It scales between zero and one instance, so it costs nothing when idle and never more than one GPU, and it takes four requests at once. A startup probe on the server's `/health` keeps requests from an instance until the weights are loaded. Cloud Run lets anyone reach the service; the API key is the gate. **A deploy starts a GPU instance**, which Cloud Run shuts down again after it has been idle for a while.
+The service is `model-host` in `europe-west4`: one NVIDIA L4, 4 CPUs and 16 GiB of memory, billed while an instance is up. It scales between zero and one instance, so it costs nothing when idle and never more than one GPU, and it takes four requests at once. A startup probe on the server's `/health` keeps requests from an instance until the weights are loaded. Cloud Run lets anyone reach the service; the API key is the gate. **A deploy by hand starts a GPU instance**, which Cloud Run shuts down again after it has been idle for a while; if the instance does not pass its startup probe, the deploy fails and traffic stays where it was.
 
 To point the app at it, set `MODEL_HOST_URL` to the service's URL followed by `/v1`, and `MODEL_HOST_API_KEY` to the key.
 
@@ -185,9 +230,11 @@ This is a light gate to keep casual visitors out, not real authentication. Anyon
 | `model/bootstrap.sh`                | Creates the cloud resources the Cloud Run model host is assembled from, and mirrors the weights into the project |
 | `model/cloudbuild-weights.yaml`     | Builds the weights image from the mirrored file. Run by hand    |
 | `model/Dockerfile`                  | The model host's service image: llama.cpp's server, the weights and the server's flags |
-| `model/cloudbuild.yaml`             | Builds the service image and pushes it                          |
+| `model/cloudbuild.yaml`             | The pipeline a merge runs: builds the service image, deploys it with no traffic, tries it, and sends it traffic |
 | `model/deploy.sh`                   | Deploys an image as the Cloud Run service, and holds its settings |
+| `model/try-revision.mjs`            | Sends a new revision one message and logs its cold start, failing past 60 seconds |
 | `model/time-reply.mjs`              | Sends the model host one message and times the reply            |
+| `model/reply-stream.mjs`            | Sends the model host one message and streams the reply, for the two scripts above |
 | `src/app/api/unlock/route.ts`       | `POST /api/unlock`: checks the phrase and sets the cookie       |
 | `src/app/api/chat/route.ts`         | `POST /api/chat`: validates messages and streams the reply      |
 | `src/app/api/speak/route.ts`        | `POST /api/speak`: returns a reply as spoken audio              |
