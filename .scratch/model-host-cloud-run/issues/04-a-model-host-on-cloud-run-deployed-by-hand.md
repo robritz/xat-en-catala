@@ -13,7 +13,7 @@ See `docs/specs/model-host-cloud-run.md`, sections "Engine and weights", "Images
 **Status:** ready-for-agent
 
 - [x] The service image starts from the official llama.cpp `server-cuda` image pinned by digest, and copies the weights from the weights image into a layer of their own, placed before anything that changes often.
-- [ ] Rebuilding the service image after changing only a server flag leaves the weights layer's digest unchanged.
+- [x] Rebuilding the service image after changing only a server flag leaves the weights layer's digest unchanged.
 - [x] The server runs four replies at once with 8,192 tokens of context each, uses the chat template embedded in the weights file, and has the samplers the app cannot set switched off.
 - [x] The server requires the API key, which reaches it from Secret Manager and appears in no image layer, script or log.
 - [x] A deploy script holds every `gcloud run deploy` setting: `europe-west4`, one NVIDIA L4, 4 CPUs, 16 GiB of memory, instance-based billing, zero to one instance, four requests at once, zonal redundancy off, unauthenticated at the Cloud Run level, and a request timeout long enough to hold a request through a cold start. It takes the image to deploy as an argument and can be run by hand.
@@ -71,4 +71,6 @@ Checked on 2026-10-13 and **it failed**. Three builds of the image in Cloud Buil
 
 The thirteen layers of the engine image were the same in all three. The weights layer differs before compression too, so the builder in Cloud Build stamps something in it with the time of the build. Copying the directory whole, which kept the digest steady on a newer local Docker, does not on Cloud Build's.
 
-**The fix, not yet verified:** `model/cloudbuild.yaml` now pushes each image as `service:latest` as well and gives it to the next build as a cache, so that the layer is taken from the image before and not made again. It needs two builds to show it: one to leave a cache behind, and one with a flag changed, whose weights layer should then carry the digest of the first. The box stays open until that is seen.
+**The fix:** `model/cloudbuild.yaml` now pushes each image as `service:latest` as well and gives it to the next build as a cache, so that the layer is taken from the image before and not made again.
+
+**Verified** with two builds by the owner. `service:cache-seed` was built on 2026-10-13 with the Dockerfile as committed, and `service:cache-check` on 2026-10-14 with `--metrics` added to the flags. Both have the weights layer `sha256:ca0a4ce7d08b…`. In the second build's log the copy step reads `CACHED`, after pulling the layer from the cache for 82 seconds, and the push reports every layer as already existing.
