@@ -89,7 +89,7 @@ A merge to `main` that touches `model/` builds the image, deploys it as a revisi
 ### Provisioning
 
 - `model/bootstrap.sh` creates what the pipeline needs: the Artifact Registry repository, the bucket and the mirrored weights file, the pipeline's and the service's service accounts with their roles, the API key secret, and the triggers. It is safe to run again.
-- Connecting the Cloud Build GitHub app to this repository is done by hand in the browser, once, before the script creates the triggers.
+- Connecting this repository to Cloud Build is done by hand in the browser, once, before the script creates the triggers. The connection is through Developer Connect and its GitHub app, as the project's other service is, which posts each build's result to the commit as a check.
 
 ### The app
 

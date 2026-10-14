@@ -69,6 +69,11 @@ sha256() {
   fi
 }
 
+connection_field() {
+  in_project developer-connect connections describe "${CONNECTION}" \
+    --location "${REGION}" --format "value($1)"
+}
+
 echo "APIs"
 in_project services enable \
   artifactregistry.googleapis.com \
@@ -189,16 +194,15 @@ if ! exists developer-connect connections describe "${CONNECTION}" --location "$
     --location "${REGION}" \
     --github-config-app developer-connect >/dev/null
 fi
-connection() {
-  in_project developer-connect connections describe "${CONNECTION}" \
-    --location "${REGION}" --format "value($1)"
-}
-if [ "$(connection installationState.stage)" != "COMPLETE" ]; then
-  cat <<EOF
+# Read into variables first, so that a failed read stops the script.
+stage="$(connection_field installationState.stage)"
+if [ "${stage}" != "COMPLETE" ]; then
+  approve_at="$(connection_field installationState.actionUri)"
+  cat >&2 <<EOF
 
 The connection to GitHub is waiting to be approved in the browser. Open
 
-  $(connection installationState.actionUri)
+  ${approve_at}
 
 sign in to GitHub as the owner of ${GITHUB_REPOSITORY}, and authorise
 Developer Connect. When it asks where to install its GitHub app, choose the
@@ -208,7 +212,7 @@ ${GITHUB_REPOSITORY} under "Repository access" and save.
 
 Then run this script again.
 EOF
-  exit 0
+  exit 1
 fi
 
 echo "Repository ${GITHUB_REPOSITORY}"
@@ -221,7 +225,7 @@ if ! exists developer-connect connections git-repository-links describe "${REPOS
     cat >&2 <<EOF
 
 The connection could not link ${GITHUB_REPOSITORY}. Its GitHub app may not
-have access to it: open $(connection githubConfig.installationUri)
+have access to it: open $(connection_field githubConfig.installationUri)
 and add the repository under "Repository access", then run this script again.
 EOF
     exit 1
