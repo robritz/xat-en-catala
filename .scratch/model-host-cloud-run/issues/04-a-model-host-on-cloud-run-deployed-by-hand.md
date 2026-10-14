@@ -13,7 +13,7 @@ See `docs/specs/model-host-cloud-run.md`, sections "Engine and weights", "Images
 **Status:** ready-for-agent
 
 - [x] The service image starts from the official llama.cpp `server-cuda` image pinned by digest, and copies the weights from the weights image into a layer of their own, placed before anything that changes often.
-- [ ] Rebuilding the service image after changing only a server flag leaves the weights layer's digest unchanged.
+- [x] Rebuilding the service image after changing only a server flag leaves the weights layer's digest unchanged.
 - [x] The server runs four replies at once with 8,192 tokens of context each, uses the chat template embedded in the weights file, and has the samplers the app cannot set switched off.
 - [x] The server requires the API key, which reaches it from Secret Manager and appears in no image layer, script or log.
 - [x] A deploy script holds every `gcloud run deploy` setting: `europe-west4`, one NVIDIA L4, 4 CPUs, 16 GiB of memory, instance-based billing, zero to one instance, four requests at once, zonal redundancy off, unauthenticated at the Cloud Run level, and a request timeout long enough to hold a request through a cold start. It takes the image to deploy as an argument and can be run by hand.
@@ -59,6 +59,18 @@ It is well under 60 seconds, so there is nothing to report to the owner under th
 - **Idle.** The instance shut down by itself at 09:01:57, ten minutes after its last request at 08:51:42.
 - **The service's settings**, read back from Cloud Run: at most one instance, CPU always allocated, zonal redundancy off.
 
-### Left open
+### The weights layer's digest
 
-Rebuilding after a flag change and comparing the weights layer's digest has not been done in Cloud Build, since no flag has needed changing. Built locally with stand-in images, the layer's digest stayed the same.
+Checked on 2026-10-13 and **it failed**. Three builds of the image in Cloud Build gave the 6.35 GB weights layer three digests, one of them a rebuild with nothing changed:
+
+| Image | Built (UTC) | Weights layer |
+| --- | --- | --- |
+| `service:5a35510` | 08:33 | `sha256:93d09ca371f2…` |
+| untagged | 09:20 | `sha256:5280017e7033…` |
+| `service:digest-check`, with `--metrics` added | 09:44 | `sha256:cc2d3eaa653b…` |
+
+The thirteen layers of the engine image were the same in all three. The weights layer differs before compression too, so the builder in Cloud Build stamps something in it with the time of the build. Copying the directory whole, which kept the digest steady on a newer local Docker, does not on Cloud Build's.
+
+**The fix:** `model/cloudbuild.yaml` now pushes each image as `service:latest` as well and gives it to the next build as a cache, so that the layer is taken from the image before and not made again.
+
+**Verified** with two builds by the owner. `service:cache-seed` was built on 2026-10-13 with the Dockerfile as committed, and `service:cache-check` on 2026-10-14 with `--metrics` added to the flags. Both have the weights layer `sha256:ca0a4ce7d08b…`. In the second build's log the copy step reads `CACHED`, after pulling the layer from the cache for 82 seconds, and the push reports every layer as already existing.

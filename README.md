@@ -92,7 +92,7 @@ Its tag names the quantisation and the revision it holds, as in `weights:Q6_K-8b
 
 The server checks an API key on every request except its health route. It reads the key from `LLAMA_API_KEY`, which Cloud Run sets from Secret Manager, so the key is in no image and no script.
 
-`model/cloudbuild.yaml` builds the image in Cloud Build and pushes it as `service:<tag>`. From the repository root:
+`model/cloudbuild.yaml` builds the image in Cloud Build and pushes it as `service:<tag>`, and again as `service:latest`, which the next build reads as its cache. While the engine and the weights stay the same, the weights layer is taken from that image and not made again, so a deploy that changes a flag moves no weights. From the repository root:
 
 ```bash
 gcloud builds submit model --config model/cloudbuild.yaml \
