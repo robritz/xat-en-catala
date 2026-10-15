@@ -4,6 +4,9 @@
 # The connection has to be approved in the browser once, which no apply can
 # do: on a first apply the repository link fails, and the output
 # github_approval_uri says where to go. Apply again once that is done.
+#
+# A trigger also fails if its account's roles were granted moments before,
+# since they take a minute to take effect. Apply again if it does.
 
 resource "google_developer_connect_connection" "github" {
   connection_id = "github"
@@ -39,6 +42,9 @@ resource "google_cloudbuild_trigger" "build" {
       branch = "^main$"
     }
   }
+
+  # Cloud Build refuses a trigger whose account cannot yet read the connection.
+  depends_on = [google_project_iam_member.build_project_roles]
 }
 
 # Deploys the service image when the Dockerfile, which decides the image, or
@@ -59,4 +65,7 @@ resource "google_cloudbuild_trigger" "deploy" {
       branch = "^main$"
     }
   }
+
+  # Cloud Build refuses a trigger whose account cannot yet read the connection.
+  depends_on = [google_project_iam_member.deploy_project_roles]
 }
