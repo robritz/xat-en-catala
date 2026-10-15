@@ -73,12 +73,20 @@ The commands below need `gcloud`, signed in as someone who can create these reso
 - a secret in Secret Manager, `model-host-api-key`, for the server's API key;
 - a connection to GitHub through Developer Connect, `github`, a link to this repository through it, and the two triggers, `model-host-build` and `model-host-deploy`.
 
-It is applied by hand, and has to be applied before the change that brought it is merged: until then, the trigger `model-host-deploy` still runs the pipeline that built and deployed in one, and on that merge would run `model/cloudbuild.yaml`, which now only builds. The state bucket has to exist before the first `init`; Terraform then adopts it, with the resources a gcloud script made before this configuration existed (see `infra/platform/imports.tf`):
+It is applied by hand:
+
+```bash
+terraform -chdir=infra/platform init
+terraform -chdir=infra/platform apply
+```
+
+Its state is kept in the state bucket it describes. On a new project that bucket has to be made first, and then imported, so that Terraform manages it from then on:
 
 ```bash
 gcloud storage buckets create gs://<project>-tfstate --project <project> \
   --location europe-west4 --uniform-bucket-level-access --public-access-prevention
 terraform -chdir=infra/platform init
+terraform -chdir=infra/platform import google_storage_bucket.state <project>-tfstate
 terraform -chdir=infra/platform apply
 ```
 
@@ -92,12 +100,6 @@ openssl rand -hex 32 | tr -d '\n' |
 ```
 
 To read it, for the app's `MODEL_HOST_API_KEY`, run `gcloud secrets versions access latest --secret model-host-api-key`.
-
-The pipeline before this one ran as `model-host-pipeline`. Once both new pipelines have run, delete it:
-
-```bash
-gcloud iam service-accounts delete model-host-pipeline@<project>.iam.gserviceaccount.com --project <project>
-```
 
 ### The weights
 

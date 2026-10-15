@@ -22,5 +22,5 @@ The two pipelines run on the same merge and never call each other. The service i
 - Changing the Dockerfile, even a comment, makes a new image and a new revision. A change elsewhere in `model/` makes neither.
 - Revisions are named by whoever applies: the deploy pipeline names each one after its build. On its first run, the pipeline read the new revision's name back from Terraform, and Cloud Run still gave the revision before, a broken one, which then took all traffic.
 - The state of both configurations is in a GCS bucket that is made by hand before the first `terraform init`.
-- The resources the scripts made are adopted with `import` blocks. The old pipeline's account, `model-host-pipeline`, is not adopted and is deleted by hand once the new pipelines have run.
+- The resources the scripts made were adopted with `import` blocks, which were removed once both states held them. The old pipeline's account, `model-host-pipeline`, was not adopted, and is deleted by hand.
 - The deploy no longer starts an instance to check the revision (`health_check_disabled`), including when someone applies `infra/service` by hand. Only the startup probe keeps requests away from an instance that is not ready.
