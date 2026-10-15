@@ -10,7 +10,9 @@ See `docs/specs/model-host-cloud-run.md`, section "The pipeline".
 
 **Blocked by:** 06 — A merge deploys the model host.
 
-**Status:** ready-for-agent
+**Status:** superseded by `.scratch/ci/issues/01-pull-requests-run-every-test.md`
+
+The owner chose to lint the Dockerfile in GitHub Actions with the rest of the checks, not in a Cloud Build trigger of its own, so that every check lives in one place. The Terraform trigger built for this ticket, in PR #35, was not merged. The lint itself, hadolint on `model/Dockerfile` with any finding failing the check, is carried out by the CI ticket, and its boxes are ticked there. The boxes below are left as they were.
 
 - [ ] `infra/platform` describes a trigger for pull requests to `main` that change anything under the model directory, running as its own service account with only the roles it needs. Its tests cover the trigger and the account. A second apply changes nothing.
 - [ ] The trigger lints the Dockerfile and reports a pass or a fail as a check on the pull request.

@@ -13,6 +13,9 @@
 # serving before it keeps serving.
 #
 # Applies wait up to ten minutes for another deploy's hold on the state.
+#
+# Terraform's version here is the one .github/workflows/test.yml tests with.
+# Change both together.
 
 substitutions:
   _REPOSITORY: model-host

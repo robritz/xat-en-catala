@@ -86,7 +86,7 @@ A merge to `main` that touches `model/` builds the image, deploys it as a revisi
 - The measured cold start is written to the build log as one line of JSON.
 - Every setting of the service lives in `infra/service/main.tf`, which the deploy pipeline applies and which can be applied by hand.
 - Going back is a traffic switch to the previous revision, by an apply of `infra/service` that names it. Nothing is rebuilt.
-- A third trigger lints the Dockerfile on pull requests that touch `model/`. It builds nothing, and runs as an account that can neither push nor deploy.
+- The Dockerfile is linted on every pull request by the repository's GitHub Actions workflow, `.github/workflows/test.yml`, with the rest of the checks. It builds nothing.
 - The weights image is built by hand, by a separate build configuration, when the weights change.
 
 ### Provisioning
