@@ -34,13 +34,26 @@ See `docs/specs/model-host-cloud-run.md`, sections "Images", "The pipeline" and 
 
 **Blocked by:** 06 — A merge deploys the model host.
 
-**Status:** ready-for-agent
+**Status:** done, with no change: the baseline meets the target
 
-- [ ] The baseline cold start is taken from at least three pipeline runs, since one run is not a measurement. One is recorded above; two more come from running the deploy trigger by hand.
-- [ ] If the baseline is under 60 seconds in all three, the ticket is closed with the numbers recorded and no change made.
-- [ ] Otherwise each candidate is deployed as its own change, with at least three logged cold starts, and nothing else altered in the same deploy.
-- [ ] A candidate that does not improve on the baseline is reverted, and its numbers are still recorded.
-- [ ] The results are written up as a short table: the variant, its cold starts, and whether it was kept.
-- [ ] The file each kept variant changes, `model/Dockerfile`, `model/cloudbuild.yaml` or `infra/service/main.tf`, carries a comment saying what it bought.
-- [ ] If no combination reaches 60 seconds, that is reported to the owner with the best number reached, and ticket 09 is not started.
-- [ ] If the weights move out of the image, the spec and the decision records are updated to say so.
+- [x] The baseline cold start is taken from at least three pipeline runs, since one run is not a measurement. One is recorded above; two more come from running the deploy trigger by hand.
+- [x] If the baseline is under 60 seconds in all three, the ticket is closed with the numbers recorded and no change made.
+- [ ] *Not needed: no candidate was tried.* Otherwise each candidate is deployed as its own change, with at least three logged cold starts, and nothing else altered in the same deploy.
+- [ ] *Not needed: no candidate was tried.* A candidate that does not improve on the baseline is reverted, and its numbers are still recorded.
+- [x] The results are written up as a short table: the variant, its cold starts, and whether it was kept.
+- [ ] *Not needed: no candidate was tried.* The file each kept variant changes, `model/Dockerfile`, `model/cloudbuild.yaml` or `infra/service/main.tf`, carries a comment saying what it bought.
+- [ ] *Not needed: no candidate was tried.* If no combination reaches 60 seconds, that is reported to the owner with the best number reached, and ticket 09 is not started.
+- [ ] *Not needed: no candidate was tried.* If the weights move out of the image, the spec and the decision records are updated to say so.
+
+## Result
+
+No manual runs were needed: the merges after ticket 06 each deployed the baseline image through the pipeline. Every image below has the same engine, weights and server flags as ticket 04's; only comments and how the weights image is named changed in the Dockerfile.
+
+| Variant | Build | Revision | Cold start | Kept |
+| --- | --- | --- | --- | --- |
+| baseline | `938fbcaf` | `model-host-00002-soc` | 13 s | yes |
+| baseline | `50963ca4` | `model-host-50963ca4-9a2f-488f-9b89-7bb5697c2089` | 10.7 s | yes |
+| baseline | `287faf02` | `model-host-287faf02-7aab-4381-a522-61d4332c3a10` | 14.5 s | yes |
+| baseline | `d5c4726f` | `model-host-d5c4726f-d5c1-4b29-a1ff-abf84bb65644` | 17.9 s | yes |
+
+All four passed, between 10.7 and 17.9 seconds, well under 60. No candidate was tried, and the image is unchanged. This is the third proof ticket 09 waits on.
