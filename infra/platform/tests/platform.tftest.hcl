@@ -78,13 +78,3 @@ run "the_secret_is_the_one_the_service_reads" {
     error_message = "The secret should be the one the service reads."
   }
 }
-
-# Deliberately fails, to see CI fail. Reverted straight after.
-run "a_deliberately_failing_assertion" {
-  command = plan
-
-  assert {
-    condition     = google_secret_manager_secret.api_key.secret_id == "deliberately-wrong"
-    error_message = "Deliberate failure."
-  }
-}
