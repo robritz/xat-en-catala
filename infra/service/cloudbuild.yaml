@@ -1,0 +1,131 @@
+# The deploy pipeline of the model host. A merge to main that changes
+# model/Dockerfile or infra/service/ runs it, through the trigger
+# infra/platform creates; it can also be run by hand, as the README shows. The
+# source is the whole repository.
+#
+# It builds nothing. It waits for the service image that model/Dockerfile
+# describes, which the build pipeline, model/cloudbuild.yaml, pushes on the
+# same merge, and applies the Terraform in this directory with it: first as a
+# revision that takes no traffic, reachable under the tag "candidate", then,
+# once that revision has sent the first word of a reply to one message within
+# 60 seconds, with all traffic sent to that revision by name, so that no other
+# revision can take it in between. Otherwise the build fails and the revision
+# serving before it keeps serving.
+#
+# Applies wait up to ten minutes for another deploy's hold on the state.
+
+substitutions:
+  _REPOSITORY: model-host
+  _SERVICE: model-host
+  _IMAGE: ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/service
+  # Waits this many times 15 seconds for the image: 50 minutes, which is as
+  # long as a build may take and then some, for a build that was queued.
+  _WAITS: "200"
+
+steps:
+  # The image is named by digest, so that the Terraform sees a new image only
+  # when there is one.
+  - id: wait for the service image
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        tag="$$(bash model/image-tag.sh)"
+        for _ in $$(seq "${_WAITS}"); do
+          # An error other than the image not being there yet, such as a
+          # missing grant, shows in the log on every try.
+          if digest="$$(gcloud artifacts docker images describe "${_IMAGE}:$$tag" \
+            --format 'value(image_summary.digest)')"; then
+            echo "${_IMAGE}@$$digest" | tee /workspace/image
+            exit 0
+          fi
+          echo "Waiting for ${_IMAGE}:$$tag, which the build pipeline pushes."
+          sleep 15
+        done
+        echo "${_IMAGE}:$$tag never appeared. Has the build pipeline for this commit failed?" >&2
+        exit 1
+
+  - id: list the service
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        gcloud run services list \
+          --project "${PROJECT_ID}" --region "${LOCATION}" \
+          --filter "metadata.name=${_SERVICE}" --format json > /workspace/service.json
+
+  # Empty before the service's first deploy, when there is no traffic to keep.
+  - id: find the serving revision
+    name: node:22-slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        node infra/service/scripts/serving-revision.js < /workspace/service.json |
+          tee /workspace/serving_revision
+
+  # The revision's name and its tag's URL are left in a file for the steps
+  # after this one. The working directory, with the providers init fetched, is
+  # kept for the last step.
+  - id: deploy it with no traffic
+    name: hashicorp/terraform:1.16.6
+    entrypoint: sh
+    dir: infra/service
+    args:
+      - -c
+      - |
+        set -eu
+        terraform init -input=false
+        terraform apply -input=false -auto-approve -lock-timeout=10m \
+          -var "image=$$(cat /workspace/image)" \
+          -var "serving_revision=$$(cat /workspace/serving_revision)"
+        revision="$$(terraform output -raw candidate_revision)"
+        url="$$(terraform output -raw candidate_url)"
+        echo "$$revision $$url" | tee /workspace/candidate
+
+  # Writes the cold start to the log as one line of JSON, whether or not it
+  # passes. The key reaches the step as a variable and is never printed.
+  - id: send it one message
+    name: node:22-slim
+    entrypoint: bash
+    secretEnv: [MODEL_HOST_API_KEY]
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        read -r revision url < /workspace/candidate
+        node infra/service/scripts/try-revision.js "$$url" "$$revision"
+
+  # The same image again, so the revision is unchanged and only its traffic
+  # moves: to the revision that was tried, by name, and not to whichever is
+  # latest by now.
+  - id: send traffic to it
+    name: hashicorp/terraform:1.16.6
+    entrypoint: sh
+    dir: infra/service
+    args:
+      - -c
+      - |
+        set -eu
+        read -r revision url < /workspace/candidate
+        terraform apply -input=false -auto-approve -lock-timeout=10m \
+          -var "image=$$(cat /workspace/image)" \
+          -var "serving_revision=$$revision"
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/${PROJECT_ID}/secrets/model-host-api-key/versions/latest
+      env: MODEL_HOST_API_KEY
+
+timeout: 4800s
+
+options:
+  # Lets _IMAGE be made from other substitutions.
+  dynamicSubstitutions: true
+  # A build that runs as its own service account has to say where its logs go.
+  logging: CLOUD_LOGGING_ONLY

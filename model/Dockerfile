@@ -2,11 +2,16 @@
 #
 # The weights come from the weights image, which model/cloudbuild-weights.yaml
 # builds, so that building this image never fetches them from anywhere else.
-# That file names the weights file, as the CMD below does.
+# That file names the weights file, as the CMD below does, and the weights
+# image's tag, as WEIGHTS_TAG does.
+#
+# This file alone decides what the image holds, so the image is tagged with
+# its checksum: see model/image-tag.sh.
 
-ARG WEIGHTS_IMAGE
+ARG REGISTRY=europe-west4-docker.pkg.dev/project-45649980-817a-462c-b12/model-host
+ARG WEIGHTS_TAG=Q6_K-8bcd7d8d8545749ef73b3046f7cb5cd64d8c70c1
 # hadolint ignore=DL3006
-FROM ${WEIGHTS_IMAGE} AS weights
+FROM ${REGISTRY}/weights:${WEIGHTS_TAG} AS weights
 
 # The official server-cuda image, build b11561.
 FROM ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:20c6e722e2fcc5ca9c15401d3fd8e35408aaf8f9c54a12f32920f637c57959bb

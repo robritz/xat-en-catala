@@ -127,7 +127,7 @@ A merge to `main` that touches `model/` builds the image, deploys it as a revisi
 - An always-on instance, or more than one instance.
 - A larger GPU than the L4.
 - Converting the weights to GGUF ourselves.
-- Terraform, or any other tool for describing the cloud resources.
+- Terraform, or any other tool for describing the cloud resources. Since superseded: see `docs/adr/0002-terraform-and-separate-build-and-deploy-pipelines.md`.
 - Automating the comparison of replies between hosts.
 - Showing the cold start, or a progress estimate, to the learner.
 
