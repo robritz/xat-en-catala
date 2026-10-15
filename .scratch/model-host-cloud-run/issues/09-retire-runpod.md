@@ -12,7 +12,10 @@ See `docs/specs/model-host-cloud-run.md`, sections "Retiring RunPod" and "Docume
 
 **Status:** ready-for-agent
 
-- [ ] The three proofs are listed in the ticket with where each was recorded, and all three hold.
+- [x] The three proofs are listed in the ticket with where each was recorded, and all three hold:
+  - Replies as good as RunPod's: the owner's verdict of 2026-10-15, in ticket 05, "The verdict".
+  - Token counts with streamed replies: ticket 05, its box on the server's `reply_tokens` log line.
+  - Three cold starts under 60 seconds: ticket 08, "Result": four pipeline deploys at 10.7 to 17.9 seconds.
 - [ ] The hosted app's `MODEL_HOST_URL` and `MODEL_HOST_API_KEY` point at Cloud Run, and a session started on the hosted app gets its greeting from Cloud Run.
 - [ ] The hosted app has run on Cloud Run for an agreed period, set by the owner, before the endpoint is deleted, so that there is a way back.
 - [ ] The RunPod endpoint is deleted, by the owner or on their explicit instruction.

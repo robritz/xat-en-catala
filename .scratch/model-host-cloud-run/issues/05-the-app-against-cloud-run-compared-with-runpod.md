@@ -12,7 +12,7 @@ See `docs/specs/model-host-cloud-run.md`, section "Retiring RunPod". Terms are d
 
 **Blocked by:** 02 — Comparison messages, a RunPod baseline, and explicit sampling; 04 — A model host on Cloud Run, deployed by hand.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] With the local variables set to the Cloud Run host's URL and key, the session start wakes the model and the greeting arrives, with the same wait message as before.
 - [x] A chat reply streams word by word and is in Catalan.
@@ -21,7 +21,7 @@ See `docs/specs/model-host-cloud-run.md`, section "Retiring RunPod". Terms are d
 - [x] Token counts arrive with each streamed reply: the server's `reply_tokens` log line carries both counts.
 - [x] A conversation long enough to approach the context window gets a clear failure and not a silent truncation or a hang; what happens is noted.
 - [x] Cloud Run's replies to the comparison messages are recorded beside the RunPod baseline, with the date and the host named.
-- [ ] The owner has read both sets and their verdict is recorded: as good, or not, with the messages that fell short.
+- [x] The owner has read both sets and their verdict is recorded: as good, or not, with the messages that fell short.
 - [x] Any change the app or the server flags needed to pass the above is made, and the existing tests still pass.
 
 ## Outcome
@@ -49,4 +49,4 @@ The host gives each reply 8,192 tokens for the conversation and the reply togeth
 
 ### The verdict
 
-Cloud Run's replies are in `docs/comparison/replies-cloud-run.md`, beside `docs/comparison/baseline-runpod.md`. The owner's verdict is still to come, so that box is open.
+Cloud Run's replies are in `docs/comparison/replies-cloud-run.md`, beside `docs/comparison/baseline-runpod.md`. On 2026-10-15 the owner judged Cloud Run's replies as good as RunPod's ("Cloud Run is good to go"), having the stray words above before them. No message was named as falling short.
