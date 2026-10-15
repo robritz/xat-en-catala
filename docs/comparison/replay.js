@@ -9,7 +9,7 @@ const [host] = process.argv.slice(2);
 const appUrl = (process.env.APP_URL || "http://localhost:3000").replace(/\/+$/, "");
 const phrase = process.env.CHAT_SECRET_PHRASE;
 if (!host || !phrase) {
-  console.error('Usage: node --env-file=.env.local docs/comparison/replay.mjs "<name of the model host>"');
+  console.error('Usage: node --env-file=.env.local docs/comparison/replay.js "<name of the model host>"');
   console.error("CHAT_SECRET_PHRASE must be set. APP_URL defaults to http://localhost:3000.");
   process.exit(1);
 }

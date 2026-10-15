@@ -1,18 +1,18 @@
 // Sends the model host one message and times the reply, to measure a cold
 // start: run it when the service has no instance.
 //
-//   MODEL_HOST_API_KEY=<key> node model/time-reply.mjs <service URL>
+//   MODEL_HOST_API_KEY=<key> node infra/service/scripts/time-reply.js <service URL>
 //
 // It prints one line of JSON: the seconds until the first word of the reply
 // and until its end, the token counts that close the stream, and the reply.
 
-import { streamReply } from "./reply-stream.mjs";
+import { streamReply } from "./reply-stream.js";
 
 const [serviceUrl] = process.argv.slice(2);
 const key = process.env.MODEL_HOST_API_KEY;
 if (!serviceUrl || !key) {
   console.error(
-    "Usage: MODEL_HOST_API_KEY=<key> node model/time-reply.mjs <service URL>",
+    "Usage: MODEL_HOST_API_KEY=<key> node infra/service/scripts/time-reply.js <service URL>",
   );
   process.exit(1);
 }
