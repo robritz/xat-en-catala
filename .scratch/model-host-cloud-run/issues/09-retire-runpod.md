@@ -20,4 +20,5 @@ See `docs/specs/model-host-cloud-run.md`, sections "Retiring RunPod" and "Docume
 - [ ] The RunPod commands are removed from `CLAUDE.md`.
 - [ ] The README describes Cloud Run as where the model runs: the opening paragraph, the diagram, the cold start and how long it takes, and the advice on avoiding it.
 - [ ] The comment on the chat route's time limit and the wait it allows for is brought in line with the new cold start. Whether to lower the limit itself is put to the owner, not decided here.
+- [ ] If the owner lowers the chat route's limit, the service's request timeout in `infra/service/main.tf`, which matches it, is lowered with it, and its comment still says so.
 - [ ] No reference to RunPod remains in the repository, other than in the decision record, the spec and the recorded baseline, which are history.
