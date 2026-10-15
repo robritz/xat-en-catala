@@ -8,13 +8,12 @@ output "image" {
   value       = var.image
 }
 
-# The pipeline sends its message to these.
-
-output "candidate_revision" {
-  description = "The name of the latest revision."
-  value       = reverse(split("/", google_cloud_run_v2_service.model_host.latest_created_revision))[0]
+output "revision" {
+  description = "The name of the latest revision, to keep it in an apply by hand."
+  value       = var.revision
 }
 
+# The pipeline sends its message to this.
 output "candidate_url" {
   description = "The URL of the tag candidate, which reaches the latest revision whatever traffic it takes."
   value       = one([for t in google_cloud_run_v2_service.model_host.traffic_statuses : t.uri if t.tag == "candidate"])

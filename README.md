@@ -147,7 +147,7 @@ The deploy pipeline runs as its own service account and:
 1. waits for `service:<tag>`, which the build pipeline pushes on the same merge. It gives up after 50 minutes, by which time the build has finished or failed;
 2. applies `infra/service` with that image as a revision that takes no traffic, reachable under the tag `candidate`. The revision that was serving keeps all traffic. No instance is started for the new one;
 3. sends that revision one message, with the key from Secret Manager, through `infra/service/scripts/try-revision.js`, and waits for the first word of the reply. The revision has never run, so the wait is its cold start;
-4. applies `infra/service` again, sending all traffic to that revision by name, if the first word came within 60 seconds.
+4. applies `infra/service` again, sending all traffic to that revision by name, if the first word came within 60 seconds. Each revision is named after the build that made it, `model-host-<build ID>`, so the name is known before the deploy and never read back from Cloud Run.
 
 No reply, an error, or a first word after 60 seconds fails the deploy at step 3, and the revision serving before it goes on serving. Each pipeline's result shows on the commit in GitHub as a check named after its trigger, which links to the build's log.
 
@@ -182,12 +182,16 @@ gcloud builds submit --config infra/service/cloudbuild.yaml \
 
 `infra/service` holds every setting of the Cloud Run service. The service is `model-host` in `europe-west4`: one NVIDIA L4, 4 CPUs and 16 GiB of memory, billed while an instance is up. It scales between zero and one instance, so it costs nothing when idle and never more than one GPU, and it takes four requests at once. A startup probe on the server's `/health` keeps requests from an instance until the weights are loaded. Cloud Run lets anyone reach the service; the API key is the gate.
 
-It takes the image to run, `image`, and optionally a revision to keep all traffic on, `serving_revision`. Left out, all traffic goes to the latest revision. To apply it by hand, which the deploy pipeline otherwise does, with the image it runs now:
+It takes the image to run, `image`, the name of the latest revision, `revision`, and optionally a revision to keep all traffic on, `serving_revision`. Left out, all traffic goes to the latest revision. To apply it by hand, which the deploy pipeline otherwise does, with the image it runs now:
 
 ```bash
 terraform -chdir=infra/service init
-terraform -chdir=infra/service apply -var "image=$(terraform -chdir=infra/service output -raw image)"
+terraform -chdir=infra/service apply \
+  -var "image=$(terraform -chdir=infra/service output -raw image)" \
+  -var "revision=$(terraform -chdir=infra/service output -raw revision)"
 ```
+
+That keeps the latest revision as it is. A change to a setting needs a new revision, and so a new name: `revision=model-host-<anything new>`, in lowercase letters, digits and dashes. The deploy pipeline names each revision after its build.
 
 An apply starts no instance, so it does not show whether the revision serves. The first request does that.
 
@@ -213,6 +217,7 @@ Then, naming the revision to go back to, and keeping the latest revision's image
 ```bash
 terraform -chdir=infra/service apply \
   -var "image=$(terraform -chdir=infra/service output -raw image)" \
+  -var "revision=$(terraform -chdir=infra/service output -raw revision)" \
   -var "serving_revision=<revision>"
 ```
 

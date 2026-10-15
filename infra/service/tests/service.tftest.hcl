@@ -23,7 +23,8 @@ override_resource {
 }
 
 variables {
-  image = "europe-west4-docker.pkg.dev/p/model-host/service@sha256:abc"
+  image    = "europe-west4-docker.pkg.dev/p/model-host/service@sha256:abc"
+  revision = "model-host-0b6c1a5e-8f2d-4c3b-9a71-2e5d4f6a8b90"
 }
 
 run "latest_takes_all_traffic_by_default" {
@@ -73,10 +74,6 @@ run "serving_revision_keeps_traffic_while_candidate_is_tried" {
     error_message = "The latest revision should take no traffic, under the tag candidate."
   }
   assert {
-    condition     = output.candidate_revision == "model-host-00003-def"
-    error_message = "The candidate should be named by the latest revision's short name."
-  }
-  assert {
     condition     = output.candidate_url == "https://candidate---model-host-xyz.a.run.app"
     error_message = "The candidate should be reached through its tag's URL."
   }
@@ -105,6 +102,29 @@ run "service_settings" {
     condition     = google_cloud_run_v2_service_iam_member.anyone.member == "allUsers"
     error_message = "Anyone should be able to reach the service; the API key is the gate."
   }
+}
+
+run "the_revision_is_named_by_whoever_applies" {
+  command = plan
+
+  assert {
+    condition     = google_cloud_run_v2_service.model_host.template[0].revision == var.revision
+    error_message = "The revision should take the name it is given, so that nothing has to read it back."
+  }
+  assert {
+    condition     = output.revision == var.revision
+    error_message = "The name should be an output, for an apply by hand that keeps the revision."
+  }
+}
+
+run "a_revision_name_belongs_to_the_service" {
+  command = plan
+
+  variables {
+    revision = "other-1"
+  }
+
+  expect_failures = [var.revision]
 }
 
 run "image_is_required" {
