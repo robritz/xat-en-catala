@@ -40,3 +40,4 @@ CMD [ \
   "--no-webui", \
   "--no-slots" \
 ]
+RUN cd /tmp
