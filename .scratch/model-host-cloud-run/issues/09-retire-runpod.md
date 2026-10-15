@@ -16,7 +16,8 @@ See `docs/specs/model-host-cloud-run.md`, sections "Retiring RunPod" and "Docume
   - Replies as good as RunPod's: the owner's verdict of 2026-10-15, in ticket 05, "The verdict".
   - Token counts with streamed replies: ticket 05, its box on the server's `reply_tokens` log line.
   - Three cold starts under 60 seconds: ticket 08, "Result": four pipeline deploys at 10.7 to 17.9 seconds.
-- [ ] The hosted app's `MODEL_HOST_URL` and `MODEL_HOST_API_KEY` point at Cloud Run, and a session started on the hosted app gets its greeting from Cloud Run.
+- [x] The hosted app's `MODEL_HOST_URL` and `MODEL_HOST_API_KEY` point at Cloud Run, and a session started on the hosted app gets its greeting from Cloud Run.
+  - The owner set both on Vercel. A session the owner started on the hosted app on 2026-10-15 got its greeting from revision `model-host-d5c4726f-d5c1-4b29-a1ff-abf84bb65644`: a 200 at 14:47 UTC after 19.5 seconds, a cold start, from an Amazon address, where Vercel's functions run, with the app's AI SDK client.
 - [ ] The hosted app has run on Cloud Run for an agreed period, set by the owner, before the endpoint is deleted, so that there is a way back.
 - [ ] The RunPod endpoint is deleted, by the owner or on their explicit instruction.
 - [ ] The RunPod API key is revoked if nothing else uses it.
