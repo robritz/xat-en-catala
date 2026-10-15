@@ -66,7 +66,7 @@ A merge to `main` that touches `model/` builds the image, deploys it as a revisi
 
 - There are two images. A weights image holds only the weights file and is rebuilt only when the weights change. The service image starts from the engine image and copies the weights from the weights image.
 - The weights sit in a layer of their own in the service image, before anything that changes often, so that its digest is the same from one revision to the next.
-- The first version is plain: default layer compression and the engine's default way of loading weights. Variants are tried afterwards, one per deploy, and kept only if the cold start the pipeline logs improves. The candidates are an uncompressed weights layer, loading the weights fully into memory against memory-mapping them, and moving the weights to Cloud Storage. If the plain version meets the target, none is tried.
+- The first version is plain: default layer compression and the engine's default way of loading weights. Variants are tried afterwards, one per deploy, and kept only if the cold start the pipeline logs improves. A variant has to change the Dockerfile to make a new image: see "The pipeline". The candidates are an uncompressed weights layer, loading the weights fully into memory against memory-mapping them, and moving the weights to Cloud Storage. If the plain version meets the target, none is tried.
 
 ### The service
 
@@ -74,22 +74,27 @@ A merge to `main` that touches `model/` builds the image, deploys it as a revisi
 - It scales between zero and one instance, with at most four requests at once on the instance. Zonal redundancy is off.
 - A startup probe on the server's health route keeps requests away from an instance until the weights are loaded.
 - The service accepts unauthenticated requests at the Cloud Run level. The API key is the gate.
-- The request timeout is long enough to hold a request open through a cold start, as the app's chat route already does.
+- The request timeout is long enough to hold a request open through a cold start, as the app's chat route already does, and follows the route's time limit if that changes.
 
 ### The pipeline
 
-- The pipeline is a Cloud Build trigger on this repository for pushes to `main`, filtered to `model/**`, running `model/cloudbuild.yaml` as a dedicated service account. It is not the default compute service account.
-- The steps are: build the service image, tagged with the commit SHA; deploy it as a revision with no traffic, under a tag; send that revision one message and time the reply; send traffic to it if a reply came back within 60 seconds; otherwise fail and leave the previous revision serving.
+- There are two pipelines, each a Cloud Build trigger on this repository for pushes to `main`, running as its own service account. Neither is the default compute service account. The reasons for splitting them are in `docs/adr/0002-terraform-and-separate-build-and-deploy-pipelines.md`.
+- The build pipeline, `model/cloudbuild.yaml`, runs on changes to `model/**`. It builds the service image, tagged with the checksum of `model/Dockerfile` (`model/image-tag.sh`), and pushes it. When an image is already pushed under that tag it builds nothing. It can push images but not deploy.
+- The deploy pipeline, `infra/service/cloudbuild.yaml`, runs on changes to `model/Dockerfile` or `infra/service/*.tf`. It waits for the image under the same tag, applies `infra/service` with it as a revision named after the build that takes no traffic, under a tag; sends that revision one message and times the reply; sends traffic to it by name if a reply came back within 60 seconds; otherwise fails and leaves the previous revision serving. It can deploy but not push.
+- Because the tag is the Dockerfile's checksum, a change that is meant to make a new image has to change the Dockerfile. A change to `model/cloudbuild.yaml` alone builds nothing new and deploys nothing.
+- Running the deploy trigger by hand makes a new revision of the same image, and so a new cold start to measure.
 - The measured cold start is written to the build log as one line of JSON.
-- The `gcloud run deploy` flags live in `model/deploy.sh`, which the pipeline calls and which can be run by hand.
-- Going back is a traffic switch to the previous revision. Nothing is rebuilt.
-- A second trigger lints the Dockerfile on pull requests that touch `model/`. It builds nothing.
+- Every setting of the service lives in `infra/service/main.tf`, which the deploy pipeline applies and which can be applied by hand.
+- Going back is a traffic switch to the previous revision, by an apply of `infra/service` that names it. Nothing is rebuilt.
+- A third trigger lints the Dockerfile on pull requests that touch `model/`. It builds nothing, and runs as an account that can neither push nor deploy.
 - The weights image is built by hand, by a separate build configuration, when the weights change.
 
 ### Provisioning
 
-- `model/bootstrap.sh` creates what the pipeline needs: the Artifact Registry repository, the bucket and the mirrored weights file, the pipeline's and the service's service accounts with their roles, the API key secret, and the triggers. It is safe to run again.
-- Connecting this repository to Cloud Build is done by hand in the browser, once, before the script creates the triggers. The connection is through Developer Connect and its GitHub app, as the project's other service is, which posts each build's result to the commit as a check.
+- `infra/platform` describes what the pipelines need: the APIs, the Artifact Registry repository, the weights bucket, the pipelines' and the service's service accounts with their roles, the API key secret, the repository connection and the triggers. It is applied by hand. A second apply changes nothing.
+- The API key's value is added to the secret with gcloud, so that it never sits in the Terraform state. The weights file is mirrored into the bucket by `model/mirror-weights.sh`.
+- The state of both configurations is in a Cloud Storage bucket that is made by hand before the first `terraform init` and is then held by `infra/platform` like the rest.
+- Connecting this repository is approved by hand in the browser, once, after the first apply makes the connection. The connection is through Developer Connect and its GitHub app, as the project's other service is, which posts each build's result to the commit as a check.
 
 ### The app
 
@@ -101,7 +106,7 @@ A merge to `main` that touches `model/` builds the image, deploys it as a revisi
 ### Order of work
 
 1. The app: the rename, the new variables and the explicit sampling. RunPod keeps serving.
-2. The images and the bootstrap script, with a first deploy by hand.
+2. The images and the bootstrap script, with a first deploy by hand. The script has since been replaced by Terraform.
 3. The pipeline.
 
 ### Retiring RunPod
