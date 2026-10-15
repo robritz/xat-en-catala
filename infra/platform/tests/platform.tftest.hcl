@@ -4,9 +4,6 @@
 #   terraform -chdir=infra/platform test
 
 mock_provider "google" {
-  # Made-up values are known when planning, as the adopted resources need.
-  override_during = plan
-
   # Values that pass the provider's checks, where made-up ones would not.
   mock_resource "google_service_account" {
     defaults = {
@@ -16,39 +13,6 @@ mock_provider "google" {
       member = "serviceAccount:a@p.iam.gserviceaccount.com"
     }
   }
-}
-
-# A mocked provider cannot import, so the resources imports.tf adopts are
-# overridden instead.
-override_resource {
-  target = google_artifact_registry_repository.model_host
-}
-override_resource {
-  target = google_storage_bucket.weights
-}
-override_resource {
-  target = google_storage_bucket.state
-}
-override_resource {
-  target = google_service_account.service
-  values = {
-    name   = "projects/p/serviceAccounts/model-host@p.iam.gserviceaccount.com"
-    id     = "projects/p/serviceAccounts/model-host@p.iam.gserviceaccount.com"
-    email  = "model-host@p.iam.gserviceaccount.com"
-    member = "serviceAccount:model-host@p.iam.gserviceaccount.com"
-  }
-}
-override_resource {
-  target = google_secret_manager_secret.api_key
-}
-override_resource {
-  target = google_developer_connect_connection.github
-}
-override_resource {
-  target = google_developer_connect_git_repository_link.repository
-}
-override_resource {
-  target = google_cloudbuild_trigger.deploy
 }
 
 run "build_and_deploy_are_separate_pipelines" {

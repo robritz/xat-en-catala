@@ -5,10 +5,11 @@
 
 mock_provider "google" {}
 
-# A mocked provider cannot import, so the resources imports.tf adopts are
-# overridden instead.
+# What Cloud Run reports once the service is applied, for the output the
+# pipeline reads.
 override_resource {
-  target = google_cloud_run_v2_service.model_host
+  target          = google_cloud_run_v2_service.model_host
+  override_during = plan
   values = {
     latest_created_revision = "projects/p/locations/europe-west4/revisions/model-host-00003-def"
     traffic_statuses = [
@@ -16,10 +17,6 @@ override_resource {
       { type = "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST", revision = "", percent = 0, tag = "candidate", uri = "https://candidate---model-host-xyz.a.run.app" },
     ]
   }
-}
-
-override_resource {
-  target = google_cloud_run_v2_service_iam_member.anyone
 }
 
 variables {
