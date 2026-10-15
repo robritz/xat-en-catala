@@ -15,8 +15,9 @@ export const SYSTEM_PROMPT = [
 // stopped where a sign-off would begin. A stop is cut from the reply, so each
 // one starts after the full stop of the sentence before it; the capital
 // keeps "Salutacions" from matching in the middle of a sentence.
-// RunPod's vLLM worker accepts four at most: with a fifth it returns an empty
-// stream.
+// Kept to four at most: the vLLM worker that served the model before Cloud
+// Run returned an empty stream with a fifth, and llama.cpp has not been tried
+// with more.
 export const SIGN_OFFS = ["\nSalutacions", " Salutacions", "(fi)"];
 
 // Used instead of SYSTEM_PROMPT for messages sent with translation switched
@@ -32,8 +33,8 @@ export const TRANSLATION_PROMPT = [
 const DEFAULT_MODEL = "BSC-LT/salamandra-7b-instruct-2606";
 
 // Sent with every request, so that model hosts running different engines are
-// asked for the same thing. These are what RunPod's vLLM worker applied when
-// it was sent none: with a fixed seed its replies were the same with and
+// asked for the same thing. These are what the vLLM worker that served the
+// model before Cloud Run applied when it was sent none: with a fixed seed its replies were the same with and
 // without them, and differed at a temperature of 0.7.
 const SAMPLING = { temperature: 1, topP: 1 };
 

@@ -1,6 +1,6 @@
 # Xat en català
 
-A proof-of-concept chatbot that replies in [Catalan](https://en.wikipedia.org/wiki/Catalan_language), no matter which language you write in, to help aid in learning the language. It switches to another language only when you ask it to, and translates what you write into Catalan while the translation toggle is on. It's a Next.js app built on the [Vercel AI SDK](https://ai-sdk.dev) that talks to a model hosted on a [RunPod serverless](https://docs.runpod.io/serverless/overview) vLLM endpoint running [Salamandra 7B Instruct](https://huggingface.co/BSC-LT/salamandra-7b-instruct-2606).
+A proof-of-concept chatbot that replies in [Catalan](https://en.wikipedia.org/wiki/Catalan_language), no matter which language you write in, to help aid in learning the language. It switches to another language only when you ask it to, and translates what you write into Catalan while the translation toggle is on. It's a Next.js app built on the [Vercel AI SDK](https://ai-sdk.dev) that talks to [Salamandra 7B Instruct](https://huggingface.co/BSC-LT/salamandra-7b-instruct-2606), quantised and served by [llama.cpp](https://github.com/ggml-org/llama.cpp) on [Google Cloud Run](https://cloud.google.com/run).
 
 <img width="386" height="678" alt="image" src="https://github.com/user-attachments/assets/386b9a16-38ae-4f66-8f30-8f763b23c5d3" />
 
@@ -25,8 +25,8 @@ Open http://localhost:3000.
 
 | Variable             | Description                                                     |
 | -------------------- | --------------------------------------------------------------- |
-| `MODEL_HOST_URL`     | Base URL of the model host's OpenAI-compatible API. For RunPod, `https://api.runpod.ai/v2/<endpoint id>/openai/v1` |
-| `MODEL_HOST_API_KEY` | The key the model host checks. For RunPod, an API key with access to the endpoint |
+| `MODEL_HOST_URL`     | Base URL of the model host's OpenAI-compatible API. For Cloud Run, the service's URL followed by `/v1` (see "The service") |
+| `MODEL_HOST_API_KEY` | The key the model host checks. For Cloud Run, the one in Secret Manager's `model-host-api-key` |
 | `CHAT_SECRET_PHRASE` | Phrase users must type to unlock the chat (see below)           |
 | `MODEL_NAME`         | Optional. The name the model host serves the model under, if it isn't `BSC-LT/salamandra-7b-instruct-2606` |
 | `TTS_API_URL`        | Optional. Base URL of the [Matxa-TTS API](https://github.com/robritz/matxa-tts-api) that speaks replies (see below). Defaults to `http://localhost:8000` |
@@ -36,23 +36,23 @@ All are read only on the server, so the API key never reaches the browser. Point
 ## How it works
 
 ```
-Browser ──POST /api/chat──▶ Next.js ──POST <MODEL_HOST_URL>/chat/completions──▶ Model host (RunPod)
+Browser ──POST /api/chat──▶ Next.js ──POST <MODEL_HOST_URL>/chat/completions──▶ Model host (Cloud Run)
         ◀── UI message stream ──    ◀── OpenAI-format token stream ───────────
 ```
 
 - The browser uses the AI SDK's `useChat` hook, which sends the whole conversation on every message. The server keeps only the user and assistant text, adds the system prompt, and calls the model with `streamText` through the model host's OpenAI-compatible API.
 - The toggle button to the left of the input switches translation on and off. While it is on, what you enter is translated into Catalan as-is instead of answered, e.g. "Where do you live?" gets "On vius?"; while it is off, it is handled as a normal chat message. The browser marks such a message in its metadata, and the server sends only that text to the model, without the rest of the conversation, with a translation prompt in place of the usual system prompt. The model is too small to tell a text to translate from one to answer from the system prompt alone.
-- Every request carries a temperature of 1 and a top-p of 1, set in `src/lib/model-host.ts`. They are what RunPod applied when it was sent none, and sending them asks any other model host for the same thing.
+- Every request carries a temperature of 1 and a top-p of 1, set in `src/lib/model-host.ts`. Sending them keeps sampling the app's to decide, whichever engine the model host runs.
 - The reply is streamed back and shown as it is written. Until the first words arrive, the UI shows "Pensant…".
 - The model reads at most 8,192 tokens of conversation and reply together on the Cloud Run model host. A reply that runs into that limit is cut off where it stands, and the UI says so under it and suggests a new conversation. A conversation that is already over the limit gets no reply, only "Error: Upstream error".
 - Each reply ends with the tokens the model read and wrote for it, as the model host counted them. The browser keeps a running count for the conversation, which any component can read with `useTokenUsage`: how long the conversation is, which is what fills the model's context window, and the totals read and written. "Nova conversa" starts the count afresh. Nothing shows it yet.
 - The server logs the same counts for each reply as one line of JSON, e.g. `{"event":"reply_tokens","inputTokens":212,"outputTokens":48,"translation":false}`. It shows in the `next dev` terminal and in your host's logs, where it can be filtered by `reply_tokens`.
-- The RunPod endpoint scales to zero when idle. **The first request after idle time can take about 3–4 minutes** while a worker starts, and the request stays open for all of that time. To absorb that wait up front, each page load begins with an "Iniciar la sessió" button. It sends a hidden message to wake the model, asking it to say hello and share a random fact about Catalonia, and the UI shows "La IA s'està despertant. Un moment, si us plau." until the greeting comes back; only then is the chat enabled. After that the message is never shown again; a slow reply later in the session just shows "Pensant…". To avoid cold starts, set the endpoint's minimum active workers to 1 in RunPod; that worker is billed while idle.
-- Because the request stays open during a cold start, `/api/chat` sets `maxDuration` to 300 seconds. If your host caps function time below the cold start, the session start fails with an error and can be retried once the worker is up.
+- The Cloud Run model host scales to zero when idle. **The first request after idle time takes about 10–20 seconds** while an instance starts and loads the weights, and the request stays open for all of that time. To absorb that wait up front, each page load begins with an "Iniciar la sessió" button. It sends a hidden message to wake the model, asking it to say hello and share a random fact about Catalonia, and the UI shows "La IA s'està despertant. Un moment, si us plau." until the greeting comes back; only then is the chat enabled. After that the message is never shown again; a slow reply later in the session just shows "Pensant…". To avoid cold starts, set `min_instance_count` to 1 in `infra/service/main.tf`; that instance and its GPU are billed while idle. How long an idle instance is kept before it is shut down is Cloud Run's to decide.
+- Because the request stays open during a cold start, `/api/chat` sets `maxDuration` to 300 seconds, well above it, and the service's request timeout in `infra/service/main.tf` matches it. If your host caps function time below the cold start, the session start fails with an error and can be retried once the instance is up.
 
 ## The model host on Cloud Run
 
-A second model host is being built on Google Cloud Run, to bring the cold start under a minute: a quantised copy of the model served by llama.cpp. The plan is in `docs/specs/model-host-cloud-run.md` and the reasons for the engine in `docs/adr/0001-quantised-llama-cpp-on-cloud-run.md`. RunPod serves the app until the new host has been compared with it.
+The model runs on Google Cloud Run: a quantised copy served by llama.cpp, with a cold start under a minute. The plan that brought it here is in `docs/specs/model-host-cloud-run.md` and the reasons for the engine in `docs/adr/0001-quantised-llama-cpp-on-cloud-run.md`.
 
 The host is in two parts, each with a pipeline of its own that a merge to `main` starts (`docs/adr/0002-terraform-and-separate-build-and-deploy-pipelines.md` gives the reasons):
 
@@ -294,7 +294,7 @@ This is a light gate to keep casual visitors out, not real authentication. Anyon
 | `src/lib/tts.ts`                    | Voice settings, and the speech and health requests to the Matxa-TTS API |
 | `src/lib/saved-exchanges.ts`        | Reads and writes the saved exchanges in the browser's `localStorage` |
 | `src/lib/token-usage.ts`            | The token counts of the conversation, readable from any component with `useTokenUsage` |
-| `docs/comparison/`                  | A fixed set of messages for comparing model hosts, RunPod's and Cloud Run's replies to them, and a script to replay them |
+| `docs/comparison/`                  | A fixed set of messages for comparing model hosts, the replies of the host before Cloud Run and of Cloud Run, and a script to replay them |
 | `model/Dockerfile`                  | The model host's service image: llama.cpp's server, the weights and the server's flags |
 | `model/cloudbuild.yaml`             | The build pipeline a merge runs: builds the service image and pushes it |
 | `model/cloudbuild-weights.yaml`     | Builds the weights image from the mirrored file. Run by hand    |

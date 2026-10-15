@@ -4,7 +4,9 @@ import { chatModel, SIGN_OFFS, SYSTEM_PROMPT, TRANSLATION_PROMPT } from "@/lib/m
 import type { ReplyUsage } from "@/lib/token-usage";
 import { isUnlocked } from "@/lib/unlock";
 
-// The request stays open while a cold worker starts, which can take minutes.
+// The request stays open while a cold instance starts, which takes 10 to 20
+// seconds on Cloud Run. The limit is well above that; the service's request
+// timeout in infra/service/main.tf matches it.
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
