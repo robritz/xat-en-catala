@@ -67,7 +67,7 @@ run "build_and_deploy_are_separate_pipelines" {
     error_message = "A merge should build only when model/ changes."
   }
   assert {
-    condition     = toset(google_cloudbuild_trigger.deploy.included_files) == toset(["model/Dockerfile", "infra/service/**"])
+    condition     = toset(google_cloudbuild_trigger.deploy.included_files) == toset(["model/Dockerfile", "infra/service/*.tf"])
     error_message = "A merge should deploy only when the image or the service changes."
   }
   assert {
@@ -96,12 +96,12 @@ run "each_pipeline_has_only_its_own_powers" {
   }
   assert {
     condition = alltrue([
-      for m in google_project_iam_member.build : m.role != "roles/run.admin"
+      for m in google_project_iam_member.build_project_roles : m.role != "roles/run.admin"
     ])
     error_message = "The build pipeline should not deploy."
   }
   assert {
-    condition     = contains([for m in google_project_iam_member.deploy : m.role], "roles/run.admin")
+    condition     = contains([for m in google_project_iam_member.deploy_project_roles : m.role], "roles/run.admin")
     error_message = "The deploy pipeline should deploy."
   }
 }

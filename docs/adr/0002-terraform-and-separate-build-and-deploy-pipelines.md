@@ -17,7 +17,8 @@ The two pipelines run on the same merge and never call each other. The service i
 
 ## Consequences
 
-- When the build pipeline fails, the deploy pipeline waits half an hour before it fails too.
+- When the build pipeline fails, the deploy pipeline waits 50 minutes before it fails too.
+- A change to the deploy pipeline or its scripts alone starts no deploy. It would make no new revision, and the message would time a warm one as a cold start.
 - Changing the Dockerfile, even a comment, makes a new image and a new revision. A change elsewhere in `model/` makes neither.
 - The state of both configurations is in a GCS bucket that is made by hand before the first `terraform init`.
 - The resources the scripts made are adopted with `import` blocks. The old pipeline's account, `model-host-pipeline`, is not adopted and is deleted by hand once the new pipelines have run.

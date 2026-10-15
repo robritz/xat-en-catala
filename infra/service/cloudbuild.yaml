@@ -8,16 +8,19 @@
 # same merge, and applies the Terraform in this directory with it: first as a
 # revision that takes no traffic, reachable under the tag "candidate", then,
 # once that revision has sent the first word of a reply to one message within
-# 60 seconds, with all traffic. Otherwise the build fails and the revision
+# 60 seconds, with all traffic sent to that revision by name, so that no other
+# revision can take it in between. Otherwise the build fails and the revision
 # serving before it keeps serving.
+#
+# Applies wait up to ten minutes for another deploy's hold on the state.
 
 substitutions:
   _REPOSITORY: model-host
   _SERVICE: model-host
   _IMAGE: ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/service
-  # Waits this many times 15 seconds for the image: half an hour, which is as
-  # long as a build may take.
-  _WAITS: "120"
+  # Waits this many times 15 seconds for the image: 50 minutes, which is as
+  # long as a build may take and then some, for a build that was queued.
+  _WAITS: "200"
 
 steps:
   # The image is named by digest, so that the Terraform sees a new image only
@@ -31,8 +34,10 @@ steps:
         set -euo pipefail
         tag="$$(bash model/image-tag.sh)"
         for _ in $$(seq "${_WAITS}"); do
+          # An error other than the image not being there yet, such as a
+          # missing grant, shows in the log on every try.
           if digest="$$(gcloud artifacts docker images describe "${_IMAGE}:$$tag" \
-            --format 'value(image_summary.digest)' 2>/dev/null)"; then
+            --format 'value(image_summary.digest)')"; then
             echo "${_IMAGE}@$$digest" | tee /workspace/image
             exit 0
           fi
@@ -76,7 +81,7 @@ steps:
       - |
         set -eu
         terraform init -input=false
-        terraform apply -input=false -auto-approve \
+        terraform apply -input=false -auto-approve -lock-timeout=10m \
           -var "image=$$(cat /workspace/image)" \
           -var "serving_revision=$$(cat /workspace/serving_revision)"
         revision="$$(terraform output -raw candidate_revision)"
@@ -97,7 +102,8 @@ steps:
         node infra/service/scripts/try-revision.js "$$url" "$$revision"
 
   # The same image again, so the revision is unchanged and only its traffic
-  # moves.
+  # moves: to the revision that was tried, by name, and not to whichever is
+  # latest by now.
   - id: send traffic to it
     name: hashicorp/terraform:1.16.6
     entrypoint: sh
@@ -106,16 +112,17 @@ steps:
       - -c
       - |
         set -eu
-        terraform apply -input=false -auto-approve \
+        read -r revision url < /workspace/candidate
+        terraform apply -input=false -auto-approve -lock-timeout=10m \
           -var "image=$$(cat /workspace/image)" \
-          -var "serving_revision="
+          -var "serving_revision=$$revision"
 
 availableSecrets:
   secretManager:
     - versionName: projects/${PROJECT_ID}/secrets/model-host-api-key/versions/latest
       env: MODEL_HOST_API_KEY
 
-timeout: 3600s
+timeout: 4800s
 
 options:
   # Lets _IMAGE be made from other substitutions.

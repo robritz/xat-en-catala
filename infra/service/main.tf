@@ -1,8 +1,8 @@
 # The model host on Cloud Run. Every setting of the service is here. The
 # deploy pipeline, infra/service/cloudbuild.yaml, applies it twice per deploy:
 # once keeping traffic on the serving revision while the new one is tried, and
-# once sending traffic to the new one. Nothing in the second apply changes the
-# revision's template, so it makes no new revision.
+# once keeping it on the new one, named. Nothing in the second apply changes
+# the revision's template, so it makes no new revision.
 
 locals {
   keep_serving = var.serving_revision != ""

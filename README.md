@@ -73,7 +73,7 @@ The commands below need `gcloud`, signed in as someone who can create these reso
 - a secret in Secret Manager, `model-host-api-key`, for the server's API key;
 - a connection to GitHub through Developer Connect, `github`, a link to this repository through it, and the two triggers, `model-host-build` and `model-host-deploy`.
 
-It is applied by hand. The state bucket has to exist before the first `init`; Terraform then adopts it, with the resources a gcloud script made before this configuration existed (see `infra/platform/imports.tf`):
+It is applied by hand, and has to be applied before the change that brought it is merged: until then, the trigger `model-host-deploy` still runs the pipeline that built and deployed in one, and on that merge would run `model/cloudbuild.yaml`, which now only builds. The state bucket has to exist before the first `init`; Terraform then adopts it, with the resources a gcloud script made before this configuration existed (see `infra/platform/imports.tf`):
 
 ```bash
 gcloud storage buckets create gs://<project>-tfstate --project <project> \
@@ -138,16 +138,16 @@ A merge to `main` starts either pipeline, or both, with nobody involved:
 | Pipeline | Trigger | Runs on a merge that changes | Does |
 | -------- | ------- | ---------------------------- | ---- |
 | Build | `model-host-build` | anything under `model/` | `model/cloudbuild.yaml`: builds the service image and pushes it as `service:<tag>`, and again as `service:latest`, which the next build reads as its cache. If `service:<tag>` is already pushed, it builds nothing |
-| Deploy | `model-host-deploy` | `model/Dockerfile` or anything under `infra/service/` | `infra/service/cloudbuild.yaml`: deploys the image, as below |
+| Deploy | `model-host-deploy` | `model/Dockerfile` or the Terraform in `infra/service/` | `infra/service/cloudbuild.yaml`: deploys the image, as below |
 
 A merge that changes neither starts nothing. While the engine and the weights stay the same, the build takes the weights layer from `service:latest` and does not make it again, so a deploy that changes a flag moves no weights.
 
 The deploy pipeline runs as its own service account and:
 
-1. waits for `service:<tag>`, which the build pipeline pushes on the same merge. It gives up after half an hour, by which time the build has finished or failed;
+1. waits for `service:<tag>`, which the build pipeline pushes on the same merge. It gives up after 50 minutes, by which time the build has finished or failed;
 2. applies `infra/service` with that image as a revision that takes no traffic, reachable under the tag `candidate`. The revision that was serving keeps all traffic. No instance is started for the new one;
 3. sends that revision one message, with the key from Secret Manager, through `infra/service/scripts/try-revision.js`, and waits for the first word of the reply. The revision has never run, so the wait is its cold start;
-4. applies `infra/service` again, sending all traffic to the revision, if the first word came within 60 seconds.
+4. applies `infra/service` again, sending all traffic to that revision by name, if the first word came within 60 seconds.
 
 No reply, an error, or a first word after 60 seconds fails the deploy at step 3, and the revision serving before it goes on serving. Each pipeline's result shows on the commit in GitHub as a check named after its trigger, which links to the build's log.
 

@@ -41,7 +41,7 @@ resource "google_secret_manager_secret_iam_member" "service_reads_key" {
 # The build pipeline pushes images to the repository, and reads the weights
 # file to build the weights image. It deploys nothing.
 
-resource "google_project_iam_member" "build" {
+resource "google_project_iam_member" "build_project_roles" {
   for_each = toset(local.pipeline_roles)
 
   project = var.project
@@ -62,12 +62,13 @@ resource "google_storage_bucket_iam_member" "build_reads_weights" {
   member = google_service_account.build.member
 }
 
-# The deploy pipeline reads the image the build pushed, applies infra/service
-# with its state in the state bucket, which includes opening the service to
-# unauthenticated requests, as the service's account and no other, and reads
-# the key, to send a new revision its test message. It builds nothing.
+# The deploy pipeline reads the image the build pushed and applies
+# infra/service, keeping its state in the state bucket. That includes opening
+# the service to unauthenticated requests, and running it as the service's
+# account and no other. It reads the key, to send a new revision its test
+# message. It builds nothing.
 
-resource "google_project_iam_member" "deploy" {
+resource "google_project_iam_member" "deploy_project_roles" {
   for_each = toset(concat(local.pipeline_roles, ["roles/run.admin"]))
 
   project = var.project

@@ -42,13 +42,15 @@ resource "google_cloudbuild_trigger" "build" {
 }
 
 # Deploys the service image when the Dockerfile, which decides the image, or
-# the service changes. It waits for the build trigger's image.
+# the service's Terraform changes. It waits for the build trigger's image.
+# Changes to the pipeline or its scripts alone deploy nothing, since they would
+# make no new revision and the message would time a warm one.
 resource "google_cloudbuild_trigger" "deploy" {
   name            = "model-host-deploy"
   location        = var.region
   description     = "Deploys the model host when a merge to main changes its image or its service"
   filename        = "infra/service/cloudbuild.yaml"
-  included_files  = ["model/Dockerfile", "infra/service/**"]
+  included_files  = ["model/Dockerfile", "infra/service/*.tf"]
   service_account = google_service_account.deploy.id
 
   developer_connect_event_config {

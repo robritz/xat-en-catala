@@ -39,12 +39,12 @@ steps:
         # BUILDKIT_INLINE_CACHE writes into the image what the next build
         # needs to use it as a cache.
         docker build \
-          --cache-from ${_REGISTRY}/service:latest \
+          --cache-from "${_REGISTRY}/service:latest" \
           --build-arg BUILDKIT_INLINE_CACHE=1 \
           --tag "$$image" \
-          --tag ${_REGISTRY}/service:latest \
+          --tag "${_REGISTRY}/service:latest" \
           model
-        docker push --all-tags ${_REGISTRY}/service
+        docker push --all-tags "${_REGISTRY}/service"
 
 timeout: 1800s
 
