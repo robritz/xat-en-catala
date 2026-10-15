@@ -73,9 +73,11 @@ steps:
         node infra/service/scripts/serving-revision.js < /workspace/service.json |
           tee /workspace/serving_revision
 
-  # The revision's name and its tag's URL are left in a file for the steps
-  # after this one. The working directory, with the providers init fetched, is
-  # kept for the last step.
+  # The revision is named after this build, here and in the last step, so
+  # that the name traffic goes to is the one tried, never one read back from
+  # Cloud Run, which can still give the revision before. The name and its
+  # tag's URL are left in a file for the steps after this one. The working
+  # directory, with the providers init fetched, is kept for the last step.
   - id: deploy it with no traffic
     name: hashicorp/terraform:1.16.6
     entrypoint: sh
@@ -87,10 +89,10 @@ steps:
         terraform init -input=false
         terraform apply -input=false -auto-approve -lock-timeout=10m \
           -var "image=$$(cat /workspace/image)" \
+          -var "revision=${_SERVICE}-${BUILD_ID}" \
           -var "serving_revision=$$(cat /workspace/serving_revision)"
-        revision="$$(terraform output -raw candidate_revision)"
         url="$$(terraform output -raw candidate_url)"
-        echo "$$revision $$url" | tee /workspace/candidate
+        echo "${_SERVICE}-${BUILD_ID} $$url" | tee /workspace/candidate
 
   # Writes the cold start to the log as one line of JSON, whether or not it
   # passes. The key reaches the step as a variable and is never printed.
@@ -105,9 +107,9 @@ steps:
         read -r revision url < /workspace/candidate
         node infra/service/scripts/try-revision.js "$$url" "$$revision"
 
-  # The same image again, so the revision is unchanged and only its traffic
-  # moves: to the revision that was tried, by name, and not to whichever is
-  # latest by now.
+  # The same image and name again, so the revision is unchanged and only its
+  # traffic moves: to the revision that was tried, by name, and not to
+  # whichever is latest by now.
   - id: send traffic to it
     name: hashicorp/terraform:1.16.6
     entrypoint: sh
@@ -116,10 +118,10 @@ steps:
       - -c
       - |
         set -eu
-        read -r revision url < /workspace/candidate
         terraform apply -input=false -auto-approve -lock-timeout=10m \
           -var "image=$$(cat /workspace/image)" \
-          -var "serving_revision=$$revision"
+          -var "revision=${_SERVICE}-${BUILD_ID}" \
+          -var "serving_revision=${_SERVICE}-${BUILD_ID}"
 
 availableSecrets:
   secretManager:

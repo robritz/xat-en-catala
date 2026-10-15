@@ -14,6 +14,7 @@ resource "google_cloud_run_v2_service" "model_host" {
   ingress  = "INGRESS_TRAFFIC_ALL"
 
   template {
+    revision        = var.revision
     service_account = "model-host@${var.project}.iam.gserviceaccount.com"
 
     # One NVIDIA L4 with 4 CPUs and 16 GiB, billed for as long as an instance
