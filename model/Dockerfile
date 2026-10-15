@@ -10,7 +10,6 @@
 
 ARG REGISTRY=europe-west4-docker.pkg.dev/project-45649980-817a-462c-b12/model-host
 ARG WEIGHTS_TAG=Q6_K-8bcd7d8d8545749ef73b3046f7cb5cd64d8c70c1
-# hadolint ignore=DL3006
 FROM ${REGISTRY}/weights:${WEIGHTS_TAG} AS weights
 
 # The official server-cuda image, build b11561.

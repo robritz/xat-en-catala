@@ -1,5 +1,6 @@
-# The connection to GitHub and the two triggers a merge to main starts. Each
-# result shows on the commit in GitHub as a check named after its trigger.
+# The connection to GitHub, the two triggers a merge to main starts, and the
+# one a pull request starts. Each result shows on the commit in GitHub as a
+# check named after its trigger.
 #
 # The connection has to be approved in the browser once, which no apply can
 # do: on a first apply the repository link fails, and the output
@@ -68,4 +69,25 @@ resource "google_cloudbuild_trigger" "deploy" {
 
   # Cloud Build refuses a trigger whose account cannot yet read the connection.
   depends_on = [google_project_iam_member.deploy_project_roles]
+}
+
+# Lints the Dockerfile when a pull request to main changes model/. It builds,
+# pushes and deploys nothing; that waits for the merge.
+resource "google_cloudbuild_trigger" "lint" {
+  name            = "model-host-lint"
+  location        = var.region
+  description     = "Lints the model host's Dockerfile when a pull request to main changes model/"
+  filename        = "model/cloudbuild-lint.yaml"
+  included_files  = ["model/**"]
+  service_account = google_service_account.lint.id
+
+  developer_connect_event_config {
+    git_repository_link = google_developer_connect_git_repository_link.repository.id
+    pull_request {
+      branch = "^main$"
+    }
+  }
+
+  # Cloud Build refuses a trigger whose account cannot yet read the connection.
+  depends_on = [google_project_iam_member.lint_project_roles]
 }

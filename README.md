@@ -70,8 +70,9 @@ The commands below need `gcloud`, signed in as someone who can create these reso
 - a service account for the service, `model-host`, which can read the API key and nothing else;
 - a service account for the build pipeline, `model-host-build`, which can push images to the repository, read the weights bucket, fetch this repository from GitHub and write build logs;
 - a service account for the deploy pipeline, `model-host-deploy`, which can read images, deploy to Cloud Run as the service's account, keep the Terraform state, read the API key, fetch this repository from GitHub and write build logs;
+- a service account for the lint pipeline, `model-host-lint`, which can fetch this repository from GitHub and write build logs and nothing else, since it runs on pull requests no one has reviewed yet;
 - a secret in Secret Manager, `model-host-api-key`, for the server's API key;
-- a connection to GitHub through Developer Connect, `github`, a link to this repository through it, and the two triggers, `model-host-build` and `model-host-deploy`.
+- a connection to GitHub through Developer Connect, `github`, a link to this repository through it, and the three triggers, `model-host-build`, `model-host-deploy` and `model-host-lint`.
 
 It is applied by hand:
 
@@ -179,6 +180,16 @@ gcloud builds submit --config infra/service/cloudbuild.yaml \
   --service-account projects/<project>/serviceAccounts/model-host-deploy@<project>.iam.gserviceaccount.com \
   --gcs-source-staging-dir gs://<project>-model-weights/source
 ```
+
+### Linting a pull request
+
+A pull request to `main` that changes anything under `model/` starts the trigger `model-host-lint`, which runs `model/cloudbuild-lint.yaml`: [hadolint](https://github.com/hadolint/hadolint) on `model/Dockerfile`, and nothing else. Any finding fails it, and the result shows on the pull request as a check named after the trigger. It builds, pushes and deploys nothing. To lint before pushing:
+
+```bash
+docker run --rm -i hadolint/hadolint < model/Dockerfile
+```
+
+A rule switched off in the Dockerfile, with a `# hadolint ignore=<rule>` comment, is explained beside it.
 
 ### The service
 
@@ -297,6 +308,7 @@ This is a light gate to keep casual visitors out, not real authentication. Anyon
 | `docs/comparison/`                  | A fixed set of messages for comparing model hosts, RunPod's and Cloud Run's replies to them, and a script to replay them |
 | `model/Dockerfile`                  | The model host's service image: llama.cpp's server, the weights and the server's flags |
 | `model/cloudbuild.yaml`             | The build pipeline a merge runs: builds the service image and pushes it |
+| `model/cloudbuild-lint.yaml`        | The lint pipeline: lints the Dockerfile on a pull request       |
 | `model/cloudbuild-weights.yaml`     | Builds the weights image from the mirrored file. Run by hand    |
 | `model/image-tag.sh`                | Prints the service image's tag, from the Dockerfile's checksum, for both pipelines |
 | `model/mirror-weights.sh`           | Mirrors the weights from Hugging Face into the project          |

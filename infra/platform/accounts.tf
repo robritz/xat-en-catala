@@ -1,5 +1,5 @@
-# The service accounts the model host and its two pipelines run as, and what
-# each may do. Neither pipeline runs as the default compute service account.
+# The service accounts the model host and its three pipelines run as, and what
+# each may do. No pipeline runs as the default compute service account.
 
 resource "google_service_account" "service" {
   account_id   = "model-host"
@@ -22,8 +22,15 @@ resource "google_service_account" "deploy" {
   depends_on = [google_project_service.apis]
 }
 
+resource "google_service_account" "lint" {
+  account_id   = "model-host-lint"
+  display_name = "Model host lint pipeline"
+
+  depends_on = [google_project_service.apis]
+}
+
 locals {
-  # What both pipelines need: to fetch this repository through the connection
+  # What every pipeline needs: to fetch this repository through the connection
   # to GitHub, and to write their build logs.
   pipeline_roles = [
     "roles/developerconnect.readTokenAccessor",
@@ -36,6 +43,18 @@ resource "google_secret_manager_secret_iam_member" "service_reads_key" {
   secret_id = google_secret_manager_secret.api_key.id
   role      = "roles/secretmanager.secretAccessor"
   member    = google_service_account.service.member
+}
+
+# The lint pipeline runs on pull requests, whose code no one has reviewed yet,
+# so it may fetch the repository and write its logs and nothing more. It
+# pushes nothing and deploys nothing.
+
+resource "google_project_iam_member" "lint_project_roles" {
+  for_each = toset(local.pipeline_roles)
+
+  project = var.project
+  role    = each.value
+  member  = google_service_account.lint.member
 }
 
 # The build pipeline pushes images to the repository, and reads the weights

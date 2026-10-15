@@ -1,0 +1,21 @@
+# The lint pipeline of the model host. A pull request to main that changes
+# model/ runs it, through the trigger infra/platform creates, and its result
+# shows on the pull request as a check named after that trigger.
+#
+# It lints the Dockerfile with hadolint and does nothing else: it builds no
+# image, pushes nothing and deploys nothing, and its account could not if it
+# tried. Any finding fails the check. A rule switched off in the Dockerfile is
+# named and explained beside it.
+
+steps:
+  # hadolint 2.15.1.
+  - id: lint the Dockerfile
+    name: hadolint/hadolint:v2.15.1-debian@sha256:9a3944b7fddcb947d1ffd90829ac1a6e5c30479223358f249d8b96c7d0019e27
+    entrypoint: hadolint
+    args: [model/Dockerfile]
+
+timeout: 300s
+
+options:
+  # A build that runs as its own service account has to say where its logs go.
+  logging: CLOUD_LOGGING_ONLY

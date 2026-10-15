@@ -78,3 +78,52 @@ run "the_secret_is_the_one_the_service_reads" {
     error_message = "The secret should be the one the service reads."
   }
 }
+
+run "a_pull_request_that_changes_model_is_linted" {
+  command = plan
+
+  assert {
+    condition     = google_cloudbuild_trigger.lint.filename == "model/cloudbuild-lint.yaml"
+    error_message = "The lint trigger should run the lint pipeline."
+  }
+  assert {
+    condition     = google_cloudbuild_trigger.lint.included_files == tolist(["model/**"])
+    error_message = "A pull request should be linted only when model/ changes."
+  }
+  assert {
+    condition     = google_cloudbuild_trigger.lint.developer_connect_event_config[0].pull_request[0].branch == "^main$"
+    error_message = "The lint pipeline should run on pull requests to main."
+  }
+  assert {
+    condition     = length(google_cloudbuild_trigger.lint.developer_connect_event_config[0].push) == 0
+    error_message = "The lint pipeline should not run on a merge."
+  }
+}
+
+run "the_lint_pipeline_can_neither_push_nor_deploy" {
+  command = plan
+
+  # An id of its own, known at plan, so the trigger is seen to run as this
+  # account and not merely as one with the mock's default id.
+  override_resource {
+    target          = google_service_account.lint
+    override_during = plan
+    values = {
+      id     = "projects/p/serviceAccounts/model-host-lint@p.iam.gserviceaccount.com"
+      member = "serviceAccount:model-host-lint@p.iam.gserviceaccount.com"
+    }
+  }
+
+  assert {
+    condition     = google_service_account.lint.account_id == "model-host-lint"
+    error_message = "The lint pipeline should have its own service account."
+  }
+  assert {
+    condition     = google_cloudbuild_trigger.lint.service_account == google_service_account.lint.id
+    error_message = "The lint trigger should run as the lint pipeline's account."
+  }
+  assert {
+    condition     = toset([for m in google_project_iam_member.lint_project_roles : m.role]) == toset(local.pipeline_roles)
+    error_message = "The lint pipeline should only fetch the repository and write its logs."
+  }
+}
