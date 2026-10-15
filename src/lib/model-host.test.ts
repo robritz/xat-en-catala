@@ -74,8 +74,9 @@ test("both prompts ask for Catalan", () => {
   expect(TRANSLATION_PROMPT).toContain("català");
 });
 
-// With a fifth, RunPod's vLLM worker answers 200 with an empty stream, which
-// the AI SDK reports as "Response stream ended without a finish reason".
+// With a fifth, the vLLM worker that served the model before Cloud Run
+// answered 200 with an empty stream, which the AI SDK reports as "Response
+// stream ended without a finish reason".
 test("asks for no more than four stop sequences", () => {
   expect(SIGN_OFFS.length).toBeLessThanOrEqual(4);
 });

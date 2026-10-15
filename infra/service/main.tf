@@ -33,8 +33,9 @@ resource "google_cloud_run_v2_service" "model_host" {
     max_instance_request_concurrency = 4
 
     # Matches the app's chat route, which holds a request open through a cold
-    # start.
-    timeout = "300s"
+    # start: 120 seconds, against a cold start of 10 to 20. Change both
+    # together.
+    timeout = "120s"
 
     # A deploy starts no instance: the first request to a revision does, so
     # the pipeline can time a real cold start, and its message, not this
