@@ -34,12 +34,16 @@ steps:
         set -euo pipefail
         tag="$$(bash model/image-tag.sh)"
         for _ in $$(seq "${_WAITS}"); do
-          # An error other than the image not being there yet, such as a
-          # missing grant, shows in the log on every try.
           if digest="$$(gcloud artifacts docker images describe "${_IMAGE}:$$tag" \
-            --format 'value(image_summary.digest)')"; then
+            --format 'value(image_summary.digest)' 2>/workspace/describe-error)"; then
             echo "${_IMAGE}@$$digest" | tee /workspace/image
             exit 0
+          fi
+          # Any error but the image not being there yet, such as a missing
+          # grant, would not go away by waiting.
+          if ! grep -q "Image not found" /workspace/describe-error; then
+            cat /workspace/describe-error >&2
+            exit 1
           fi
           echo "Waiting for ${_IMAGE}:$$tag, which the build pipeline pushes."
           sleep 15
