@@ -96,6 +96,10 @@ run "service_settings" {
     error_message = "A deploy should start no instance, so that the pipeline times a real cold start."
   }
   assert {
+    condition     = google_cloud_run_v2_service.model_host.template[0].timeout == "120s"
+    error_message = "A request should be held as long as the app's chat route holds it, 120 seconds."
+  }
+  assert {
     condition     = google_cloud_run_v2_service_iam_member.anyone.member == "allUsers"
     error_message = "Anyone should be able to reach the service; the API key is the gate."
   }

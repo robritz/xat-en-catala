@@ -6,8 +6,8 @@ import { isUnlocked } from "@/lib/unlock";
 
 // The request stays open while a cold instance starts, which takes 10 to 20
 // seconds on Cloud Run. The limit is well above that; the service's request
-// timeout in infra/service/main.tf matches it.
-export const maxDuration = 300;
+// timeout in infra/service/main.tf matches it, and changes with it.
+export const maxDuration = 120;
 
 export async function POST(request: Request) {
   if (!(await isUnlocked())) {
