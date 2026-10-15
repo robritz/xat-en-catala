@@ -98,6 +98,10 @@ run "a_pull_request_that_changes_model_is_linted" {
     condition     = length(google_cloudbuild_trigger.lint.developer_connect_event_config[0].push) == 0
     error_message = "The lint pipeline should not run on a merge."
   }
+  assert {
+    condition     = google_cloudbuild_trigger.lint.developer_connect_event_config[0].pull_request[0].comment_control == "COMMENTS_ENABLED_FOR_EXTERNAL_CONTRIBUTORS_ONLY"
+    error_message = "A pull request from outside should wait for an owner before it runs."
+  }
 }
 
 run "the_lint_pipeline_can_neither_push_nor_deploy" {

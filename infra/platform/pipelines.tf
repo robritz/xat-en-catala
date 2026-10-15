@@ -1,6 +1,6 @@
 # The connection to GitHub, the two triggers a merge to main starts, and the
-# one a pull request starts. Each result shows on the commit in GitHub as a
-# check named after its trigger.
+# one a pull request starts. Each result shows in GitHub, on the commit or the
+# pull request, as a check named after its trigger.
 #
 # The connection has to be approved in the browser once, which no apply can
 # do: on a first apply the repository link fails, and the output
@@ -85,6 +85,10 @@ resource "google_cloudbuild_trigger" "lint" {
     git_repository_link = google_developer_connect_git_repository_link.repository.id
     pull_request {
       branch = "^main$"
+      # The repository is public, and the build runs the configuration in the
+      # pull request. A pull request from outside waits for an owner's
+      # "/gcbrun" comment before it runs anything.
+      comment_control = "COMMENTS_ENABLED_FOR_EXTERNAL_CONTRIBUTORS_ONLY"
     }
   }
 

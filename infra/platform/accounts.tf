@@ -45,18 +45,6 @@ resource "google_secret_manager_secret_iam_member" "service_reads_key" {
   member    = google_service_account.service.member
 }
 
-# The lint pipeline runs on pull requests, whose code no one has reviewed yet,
-# so it may fetch the repository and write its logs and nothing more. It
-# pushes nothing and deploys nothing.
-
-resource "google_project_iam_member" "lint_project_roles" {
-  for_each = toset(local.pipeline_roles)
-
-  project = var.project
-  role    = each.value
-  member  = google_service_account.lint.member
-}
-
 # The build pipeline pushes images to the repository, and reads the weights
 # file to build the weights image. It deploys nothing.
 
@@ -118,4 +106,16 @@ resource "google_secret_manager_secret_iam_member" "deploy_reads_key" {
   secret_id = google_secret_manager_secret.api_key.id
   role      = "roles/secretmanager.secretAccessor"
   member    = google_service_account.deploy.member
+}
+
+# The lint pipeline runs on pull requests, whose code no one has reviewed yet,
+# so it may fetch the repository and write its logs and nothing more. It
+# pushes nothing and deploys nothing.
+
+resource "google_project_iam_member" "lint_project_roles" {
+  for_each = toset(local.pipeline_roles)
+
+  project = var.project
+  role    = each.value
+  member  = google_service_account.lint.member
 }

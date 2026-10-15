@@ -183,10 +183,10 @@ gcloud builds submit --config infra/service/cloudbuild.yaml \
 
 ### Linting a pull request
 
-A pull request to `main` that changes anything under `model/` starts the trigger `model-host-lint`, which runs `model/cloudbuild-lint.yaml`: [hadolint](https://github.com/hadolint/hadolint) on `model/Dockerfile`, and nothing else. Any finding fails it, and the result shows on the pull request as a check named after the trigger. It builds, pushes and deploys nothing. To lint before pushing:
+A pull request to `main` that changes anything under `model/` starts the trigger `model-host-lint`, which runs `model/cloudbuild-lint.yaml`: [hadolint](https://github.com/hadolint/hadolint) on `model/Dockerfile`, and nothing else. Any finding fails it, and the result shows on the pull request as a check named after the trigger. It builds, pushes and deploys nothing, and a pull request from outside the repository waits for an owner to comment `/gcbrun` before it runs. To lint before pushing:
 
 ```bash
-docker run --rm -i hadolint/hadolint < model/Dockerfile
+docker run --rm -i hadolint/hadolint:v2.15.1-debian hadolint - < model/Dockerfile
 ```
 
 A rule switched off in the Dockerfile, with a `# hadolint ignore=<rule>` comment, is explained beside it.

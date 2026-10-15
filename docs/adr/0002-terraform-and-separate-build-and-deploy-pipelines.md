@@ -24,3 +24,4 @@ The two pipelines run on the same merge and never call each other. The service i
 - The state of both configurations is in a GCS bucket that is made by hand before the first `terraform init`.
 - The resources the scripts made were adopted with `import` blocks, which were removed once both states held them. The old pipeline's account, `model-host-pipeline`, was not adopted, and is deleted by hand.
 - The deploy no longer starts an instance to check the revision (`health_check_disabled`), including when someone applies `infra/service` by hand. Only the startup probe keeps requests away from an instance that is not ready.
+- A third pipeline, which lints the Dockerfile on pull requests, has an account of its own too, which can only fetch the repository and write logs. A pull request's build runs the configuration in that pull request, which no one has reviewed yet, so it is given nothing worth taking, and one from outside the repository waits for an owner's `/gcbrun`.
