@@ -338,3 +338,9 @@ npm test        # Vitest in watch mode; `npm test -- run` for a single run
 ## Tests
 
 Tests use [Vitest](https://vitest.dev) and React Testing Library, and sit next to the code they cover as `*.test.ts(x)`. They never call the model host: `fetch`, the model, cookies and the environment variables are stubbed.
+
+Every pull request to `main`, and every push to it, runs all the checks in GitHub Actions, `.github/workflows/test.yml`, and shows each job's result on the pull request as a check under `test`: the typecheck, ESLint and these tests; `terraform fmt -check` and `terraform test` in both Terraform configurations (see "Testing the Terraform"); and hadolint on `model/Dockerfile`. It uses no secrets. To lint the Dockerfile before pushing:
+
+```bash
+docker run --rm -i hadolint/hadolint:v2.15.1-debian hadolint - < model/Dockerfile
+```
