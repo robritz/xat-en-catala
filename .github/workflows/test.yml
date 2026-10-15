@@ -31,6 +31,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # Writes the route types, such as LayoutProps, into .next/, which the
+      # typecheck needs and which only next dev or next build makes otherwise.
+      - run: npx next typegen
       - run: npx tsc --noEmit
       - run: npm run lint
       - run: npm test -- run
