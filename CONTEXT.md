@@ -23,6 +23,10 @@ _Avoid_: Pair, question/response pair, turn
 An exchange the user has chosen to keep, so that it outlives the conversation it came from. It is kept on the user's device only.
 _Avoid_: Saved pair, saved phrase, bookmark, favourite
 
+**Offer**:
+What a reply shows under it once the user opens it: to hear the reply spoken, and to keep its exchange as a saved exchange. One reply's offer is open at a time.
+_Avoid_: Menu, actions, toolbar
+
 **Conversation**:
 The messages and replies exchanged since the user last started afresh.
 _Avoid_: Thread, history
