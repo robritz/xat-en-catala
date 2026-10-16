@@ -390,7 +390,7 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
           </button>
         )}
         {held?.status === "failed" && <ListenFailure />}
-        {held?.saveFailed && !isSaved && <p className="text-sm text-red-600">No s&apos;ha pogut desar.</p>}
+        {held?.saveFailed && !isSaved && <p className="text-sm text-danger">No s&apos;ha pogut desar.</p>}
       </div>
     );
   }
@@ -408,7 +408,7 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
       ref={containerRef}
       className="fixed inset-x-0 top-0 mx-auto flex h-dvh w-full max-w-2xl flex-col px-4"
     >
-      <header className="flex shrink-0 items-center justify-between border-b border-black/10 py-4 dark:border-white/10">
+      <header className="flex shrink-0 items-center justify-between border-b border-rule py-4">
         <h1 className="text-lg font-semibold">Xat en català</h1>
         <div className="flex items-center gap-3">
           {/* The mute button under the reply being spoken may be out of sight. */}
@@ -416,7 +416,7 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
             <button
               onClick={mute}
               aria-label="Silencia"
-              className="text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white"
+              className="p-0.5 text-muted hover:text-foreground"
             >
               <Icon path={MUTE_ICON} />
             </button>
@@ -436,7 +436,7 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
               disabled={loading}
               aria-label="Nova conversa"
               title="Nova conversa"
-              className="text-black/50 hover:text-black disabled:opacity-40 dark:text-white/50 dark:hover:text-white"
+              className="p-0.5 text-muted hover:text-foreground disabled:opacity-40"
             >
               <Icon path={NEW_CONVERSATION_ICON} />
             </button>
@@ -450,7 +450,7 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
               }}
               aria-label={showingSaved ? undefined : "Desats"}
               title={showingSaved ? undefined : "Desats"}
-              className="text-sm text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white"
+              className="p-0.5 text-sm text-muted hover:text-foreground"
             >
               {showingSaved ? "Torna al xat" : <Icon path={SAVED_ICON} />}
             </button>
@@ -469,20 +469,20 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
       ) : (
         <main ref={mainRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain py-6">
           {!unlocked && (
-            <p className="pt-20 text-center text-xs text-black/50 dark:text-white/50">
+            <p className="pt-20 text-center text-xs text-muted">
               Please enter the secret phrase to start chatting.
             </p>
           )}
           {unlocked && !started && (
             <div className="flex h-3/4 items-center justify-center">
               {loading ? (
-                <p className="text-center text-xs text-black/50 dark:text-white/50">
+                <p className="text-center text-xs text-muted">
                   La IA s&apos;està despertant. Un moment, si us plau.
                 </p>
               ) : (
                 <button
                   onClick={startSession}
-                  className="rounded-full bg-blue-600 px-5 py-2 font-medium text-white"
+                  className="rounded-full bg-accent px-5 py-2 font-medium text-white"
                 >
                   Iniciar la sessió
                 </button>
@@ -490,7 +490,7 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
             </div>
           )}
           {started && visibleMessages.length === 0 && (
-            <p className="pt-20 text-center text-black/40 dark:text-white/40">
+            <p className="pt-20 text-center text-muted">
               Escriu un missatge en qualsevol idioma. Et respondré en català.
             </p>
           )}
@@ -498,7 +498,7 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
             m.role === "user" ? (
               <div key={m.id} className="flex justify-end">
                 {/* A message may be in any language, so it is marked unknown. */}
-                <div lang="" className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-blue-600 px-4 py-2 text-white">
+                <div lang="" className="max-w-[85%] whitespace-pre-wrap wrap-anywhere rounded-2xl bg-accent px-4 py-2 text-white">
                   {messageText(m)}
                 </div>
               </div>
@@ -515,7 +515,7 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
                     // Not while a reply is still being written.
                     if (!loading) toggleOffer(m.id);
                   }}
-                  className="markdown max-w-[85%] rounded-2xl bg-black/5 px-4 py-2 dark:bg-white/10"
+                  className="markdown max-w-[85%] rounded-2xl bg-surface px-4 py-2"
                 >
                   <Reply text={messageText(m)} />
                 </div>
@@ -525,17 +525,17 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
           )}
           {started && loading && !replying && (
             <div className="flex">
-              <div className="rounded-2xl bg-black/5 px-4 py-2 text-black/50 dark:bg-white/10 dark:text-white/50">
+              <div className="rounded-2xl bg-surface px-4 py-2 text-muted">
                 Pensant…
               </div>
             </div>
           )}
           {error && (
-            <p className="text-center text-sm text-red-600">Error: {error.message}</p>
+            <p className="text-center text-sm text-danger">Error: {error.message}</p>
           )}
           {/* Only while that reply is the newest: a later one came out whole. */}
           {cutShortId !== null && messages.at(-1)?.id === cutShortId && (
-            <p className="text-center text-sm text-red-600">
+            <p className="text-center text-sm text-danger">
               La resposta s&apos;ha tallat perquè la conversa és massa llarga. Comença&apos;n una de nova.
             </p>
           )}
@@ -550,7 +550,7 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
         onSubmit={handleSubmit}
         aria-labelledby={inputLabelId}
         hidden={showingSaved}
-        className={`${showingSaved ? "hidden" : "flex"} shrink-0 gap-2 border-t border-black/10 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] dark:border-white/10`}
+        className={`${showingSaved ? "hidden" : "flex"} shrink-0 gap-2 border-t border-rule pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]`}
       >
         {/* The placeholder and the Envia button say what the field is for to
             the eye; the label says it to a screen reader. */}
@@ -569,8 +569,8 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
           disabled={!started}
           className={`shrink-0 rounded-full border p-2 disabled:opacity-40 ${
             translating
-              ? "border-blue-600 bg-blue-600 text-white"
-              : "border-black/15 text-black/50 hover:text-black dark:border-white/20 dark:text-white/50 dark:hover:text-white"
+              ? "border-accent bg-accent text-white"
+              : "border-outline text-muted hover:text-foreground"
           }`}
         >
           <svg
@@ -594,12 +594,12 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
           ref={inputRef}
           autoFocus
           disabled={inputDisabled}
-          className="min-w-0 flex-1 rounded-full border border-black/15 bg-transparent px-4 py-2 text-base outline-none focus:border-blue-600 disabled:opacity-40 dark:border-white/20"
+          className="min-w-0 flex-1 rounded-full border border-outline bg-transparent px-4 py-2 text-base outline-none focus:border-accent disabled:opacity-40"
         />
         <button
           type="submit"
           disabled={loading || inputDisabled || !input.trim()}
-          className="rounded-full bg-blue-600 px-5 py-2 font-medium text-white disabled:opacity-40"
+          className="rounded-full bg-accent px-5 py-2 font-medium text-white disabled:opacity-40"
         >
           Envia
         </button>

@@ -65,11 +65,11 @@ export default function SavedExchanges({
   return (
     <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-2">
       {exchanges.length === 0 ? (
-        <p className="px-6 pt-20 text-center text-black/40 dark:text-white/40">
+        <p className="px-6 pt-20 text-center text-muted">
           Encara no has desat res. Toca una resposta i després el marcador per desar-la.
         </p>
       ) : (
-        <ul ref={listRef} className="divide-y divide-black/10 dark:divide-white/10">
+        <ul ref={listRef} className="divide-y divide-rule">
           {exchanges.map((exchange, place) => {
             const isOpen = open !== null && isSameExchange(open, exchange);
             const sound = soundOf(exchange);
@@ -81,13 +81,13 @@ export default function SavedExchanges({
                   lang=""
                   aria-expanded={isOpen}
                   onClick={() => setOpen(isOpen ? null : exchange)}
-                  className={`block w-full py-3 text-left ${isOpen ? "whitespace-pre-wrap font-medium" : "truncate"}`}
+                  className={`block w-full py-3 text-left ${isOpen ? "whitespace-pre-wrap wrap-anywhere font-medium" : "truncate"}`}
                 >
                   {exchange.message}
                 </button>
                 {isOpen && (
                   <div className="mb-3 flex flex-col items-start gap-1">
-                    <div className="markdown rounded-2xl bg-black/5 px-4 py-2 dark:bg-white/10">
+                    <div className="markdown rounded-2xl bg-surface px-4 py-2">
                       <Reply text={exchange.reply} />
                     </div>
                     <div className="flex items-center gap-2">
