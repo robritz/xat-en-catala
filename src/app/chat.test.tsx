@@ -292,6 +292,17 @@ function offerIsOpen(replyText: string) {
   return optionsButton(replyText).getAttribute("aria-expanded") === "true";
 }
 
+// Whether the conversation is marked busy, so that a reply being written
+// isn't read out until it is whole.
+function conversationIsBusy() {
+  return screen.getByRole("log").getAttribute("aria-busy") === "true";
+}
+
+// Whether the text is in a region whose changes are announced politely.
+function isAnnouncedAsStatus(text: string) {
+  return screen.getAllByRole("status").some((status) => status.textContent?.includes(text));
+}
+
 function pressEscape(element: Element) {
   fireEvent.keyDown(element, { key: "Escape" });
 }
@@ -538,11 +549,11 @@ describe("the tokens of the conversation", () => {
   // Any component can read them, wherever it is on the page.
   function Tokens() {
     const { conversationTokens, inputTokens, outputTokens } = useTokenUsage();
-    return <output>{`${conversationTokens} long, ${inputTokens} read, ${outputTokens} written`}</output>;
+    return <output aria-label="Tokens">{`${conversationTokens} long, ${inputTokens} read, ${outputTokens} written`}</output>;
   }
 
   function tokens() {
-    return screen.getByRole("status").textContent;
+    return screen.getByRole("status", { name: "Tokens" }).textContent;
   }
 
   async function renderStartedWithTokens() {
@@ -2229,5 +2240,83 @@ describe("the offer from the keyboard", () => {
     fireEvent.click(optionsButton("Bon dia!"));
 
     expect(await accessibilityFaults()).toEqual([]);
+  });
+});
+
+describe("what the chat says to a screen reader", () => {
+  test("keeps the conversation as a log of messages and replies", async () => {
+    await renderStarted();
+    await send("Hello");
+
+    const log = screen.getByRole("log");
+    expect(within(log).getByText("Hello")).toBeTruthy();
+    expect(within(log).getByText("Bon dia!")).toBeTruthy();
+  });
+
+  test("marks the conversation busy while a reply is written, and not once it ends", async () => {
+    await renderStarted();
+    expect(conversationIsBusy()).toBe(false);
+
+    const arrive = coldStart();
+    await send("Hello");
+    expect(conversationIsBusy()).toBe(true);
+
+    await arrive(reply("Bon dia!"));
+    expect(conversationIsBusy()).toBe(false);
+  });
+
+  test("marks the conversation busy while the greeting is written", async () => {
+    const arrive = coldStart();
+    render(<Chat initiallyUnlocked />);
+    await clickStart();
+    expect(conversationIsBusy()).toBe(true);
+
+    await arrive(reply("Hola!"));
+    expect(conversationIsBusy()).toBe(false);
+  });
+
+  test("doesn't leave the conversation busy when a reply fails", async () => {
+    await renderStarted();
+    answer = failure("Bad gateway");
+
+    await send("Hello");
+
+    expect(conversationIsBusy()).toBe(false);
+  });
+
+  test("doesn't leave the conversation busy after a visit to the saved exchanges", async () => {
+    await renderStarted();
+    await send("Hello");
+    openSaved();
+    backToChat();
+
+    expect(conversationIsBusy()).toBe(false);
+  });
+
+  test("announces that the model is waking", async () => {
+    coldStart();
+    render(<Chat initiallyUnlocked />);
+
+    await clickStart();
+
+    expect(isAnnouncedAsStatus(WAKE_MESSAGE)).toBe(true);
+  });
+
+  test("announces that the model is thinking", async () => {
+    await renderStarted();
+    coldStart();
+
+    await send("Hello");
+
+    expect(isAnnouncedAsStatus("Pensant…")).toBe(true);
+  });
+
+  test("announces that a reply was cut short", async () => {
+    await renderStarted();
+    answer = cutShort("Hi havia una vegada un");
+
+    await send("Explica'm un conte");
+
+    expect(isAnnouncedAsStatus(CUT_SHORT)).toBe(true);
   });
 });

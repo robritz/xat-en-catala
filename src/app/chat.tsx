@@ -493,11 +493,15 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
           )}
           {unlocked && !started && (
             <div className="flex h-3/4 items-center justify-center">
-              {loading ? (
-                <p className="text-center text-xs text-muted">
-                  La IA s&apos;està despertant. Un moment, si us plau.
-                </p>
-              ) : (
+              {/* There before it says anything, so that what it says is announced. */}
+              <div role="status">
+                {loading && (
+                  <p className="text-center text-xs text-muted">
+                    La IA s&apos;està despertant. Un moment, si us plau.
+                  </p>
+                )}
+              </div>
+              {!loading && (
                 <button
                   onClick={startSession}
                   className="rounded-full bg-accent px-5 py-2 font-medium text-white"
@@ -512,82 +516,92 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
               Escriu un missatge en qualsevol idioma. Et respondré en català.
             </p>
           )}
-          {visibleMessages.map((m) =>
-            m.role === "user" ? (
-              <div key={m.id} className="flex justify-end">
-                {/* A message may be in any language, so it is marked unknown. */}
-                <div lang="" className="max-w-[85%] whitespace-pre-wrap wrap-anywhere rounded-2xl bg-accent px-4 py-2 text-white">
-                  {messageText(m)}
-                </div>
-              </div>
-            ) : (
-              <div
-                key={m.id}
-                className="flex flex-col items-start gap-1"
-                onKeyDown={(e) => {
-                  if (e.key === "Escape" && offer?.id === m.id) closeOffer(m.id);
-                }}
-                // Focus moving to something else closes the offer, as a press
-                // elsewhere does. Focus lost to nothing, as when a pressed
-                // button is replaced, leaves it open.
-                onBlur={(e) => {
-                  const to = e.relatedTarget;
-                  if (offer?.id === m.id && to && !e.currentTarget.contains(to)) setOffer(null);
-                }}
-              >
-                {/* Tapping a reply offers to speak it and to save it. A press
-                    on the button beside it is a press on the reply too, so
-                    that it doesn't count as a press elsewhere. */}
-                <div data-reply className="flex max-w-[85%] items-start gap-1">
-                  <div
-                    onClick={(e) => {
-                      // Not for a link, which the tap follows, nor for a drag
-                      // that selected some of the text.
-                      if ((e.target as Element).closest("a")) return;
-                      if (!window.getSelection()?.isCollapsed) return;
-                      // Not while a reply is still being written.
-                      if (!loading) toggleOffer(m.id);
-                    }}
-                    className="markdown min-w-0 rounded-2xl bg-surface px-4 py-2"
-                  >
-                    <Reply text={messageText(m)} />
+          {/* Busy while a reply is written, so that a screen reader reads it
+              once it is whole rather than word by word. */}
+          <div role="log" aria-busy={loading} className="space-y-4 empty:m-0">
+            {visibleMessages.map((m) =>
+              m.role === "user" ? (
+                <div key={m.id} className="flex justify-end">
+                  {/* A message may be in any language, so it is marked unknown. */}
+                  <div lang="" className="max-w-[85%] whitespace-pre-wrap wrap-anywhere rounded-2xl bg-accent px-4 py-2 text-white">
+                    {messageText(m)}
                   </div>
-                  {/* The way to the offer for those who can't tap. */}
-                  {hasOffer(m.id) && (
-                    <button
-                      type="button"
-                      id={optionsButtonId(m.id)}
-                      onClick={() => toggleOffer(m.id)}
-                      disabled={loading}
-                      aria-label="Opcions de la resposta"
-                      aria-expanded={offer?.id === m.id}
-                      aria-controls={offerElementId(m.id)}
-                      className="shrink-0 p-0.5 text-muted hover:text-foreground disabled:opacity-40"
-                    >
-                      <Icon path={OPTIONS_ICON} />
-                    </button>
-                  )}
                 </div>
-                {optionsUnder(m)}
+              ) : (
+                <div
+                  key={m.id}
+                  className="flex flex-col items-start gap-1"
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape" && offer?.id === m.id) closeOffer(m.id);
+                  }}
+                  // Focus moving to something else closes the offer, as a press
+                  // elsewhere does. Focus lost to nothing, as when a pressed
+                  // button is replaced, leaves it open.
+                  onBlur={(e) => {
+                    const to = e.relatedTarget;
+                    if (offer?.id === m.id && to && !e.currentTarget.contains(to)) setOffer(null);
+                  }}
+                >
+                  {/* Tapping a reply offers to speak it and to save it. A press
+                      on the button beside it is a press on the reply too, so
+                      that it doesn't count as a press elsewhere. */}
+                  <div data-reply className="flex max-w-[85%] items-start gap-1">
+                    <div
+                      onClick={(e) => {
+                        // Not for a link, which the tap follows, nor for a drag
+                        // that selected some of the text.
+                        if ((e.target as Element).closest("a")) return;
+                        if (!window.getSelection()?.isCollapsed) return;
+                        // Not while a reply is still being written.
+                        if (!loading) toggleOffer(m.id);
+                      }}
+                      className="markdown min-w-0 rounded-2xl bg-surface px-4 py-2"
+                    >
+                      <Reply text={messageText(m)} />
+                    </div>
+                    {/* The way to the offer for those who can't tap. */}
+                    {hasOffer(m.id) && (
+                      <button
+                        type="button"
+                        id={optionsButtonId(m.id)}
+                        onClick={() => toggleOffer(m.id)}
+                        disabled={loading}
+                        aria-label="Opcions de la resposta"
+                        aria-expanded={offer?.id === m.id}
+                        aria-controls={offerElementId(m.id)}
+                        className="shrink-0 p-0.5 text-muted hover:text-foreground disabled:opacity-40"
+                      >
+                        <Icon path={OPTIONS_ICON} />
+                      </button>
+                    )}
+                  </div>
+                  {optionsUnder(m)}
+                </div>
+              ),
+            )}
+          </div>
+          {/* Status regions are there before they say anything, so that what
+              they say is announced. Empty, they take no room. */}
+          <div role="status" className="empty:m-0">
+            {started && loading && !replying && (
+              <div className="flex">
+                <div className="rounded-2xl bg-surface px-4 py-2 text-muted">
+                  Pensant…
+                </div>
               </div>
-            ),
-          )}
-          {started && loading && !replying && (
-            <div className="flex">
-              <div className="rounded-2xl bg-surface px-4 py-2 text-muted">
-                Pensant…
-              </div>
-            </div>
-          )}
+            )}
+          </div>
           {error && (
             <p className="text-center text-sm text-danger">Error: {error.message}</p>
           )}
           {/* Only while that reply is the newest: a later one came out whole. */}
-          {cutShortId !== null && messages.at(-1)?.id === cutShortId && (
-            <p className="text-center text-sm text-danger">
-              La resposta s&apos;ha tallat perquè la conversa és massa llarga. Comença&apos;n una de nova.
-            </p>
-          )}
+          <div role="status" className="empty:m-0">
+            {cutShortId !== null && messages.at(-1)?.id === cutShortId && (
+              <p className="text-center text-sm text-danger">
+                La resposta s&apos;ha tallat perquè la conversa és massa llarga. Comença&apos;n una de nova.
+              </p>
+            )}
+          </div>
           <div ref={bottomRef} />
         </main>
       )}
