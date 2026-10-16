@@ -17,6 +17,7 @@ const NEW_BUTTON = "Nova conversa";
 const SAVED_BUTTON = "Desats";
 const BACK_BUTTON = "Torna al xat";
 const DELETE_BUTTON = "Suprimeix";
+const OPTIONS_BUTTON = "Opcions de la resposta";
 const SAVE_FAILURE = "No s'ha pogut desar.";
 const NOTHING_SAVED =
   "Encara no has desat res. Toca una resposta i després el marcador per desar-la.";
@@ -278,6 +279,21 @@ function sentTranslateFlags() {
   return JSON.parse(init!.body as string).messages.map(
     (m: { metadata?: { translate?: boolean } }) => m.metadata?.translate === true,
   );
+}
+
+// The button beside a reply that opens and closes the offer under it.
+function optionsButton(replyText: string) {
+  const row = screen.getByText(replyText).closest("[data-reply]") as HTMLElement;
+  return within(row).getByRole<HTMLButtonElement>("button", { name: OPTIONS_BUTTON });
+}
+
+// Whether the offer under a reply is open, as its button says.
+function offerIsOpen(replyText: string) {
+  return optionsButton(replyText).getAttribute("aria-expanded") === "true";
+}
+
+function pressEscape(element: Element) {
+  fireEvent.keyDown(element, { key: "Escape" });
 }
 
 // The faults axe finds in the page as it stands. jsdom computes no colours,
@@ -2085,5 +2101,133 @@ describe("accessibility", () => {
     fireEvent.click(savedRow("Good morning"));
     expect(savedRow("Good morning").closest("[lang]")?.getAttribute("lang")).toBe("");
     expect(screen.getByText("Resposta a Good morning").closest("[lang]")).toBeNull();
+  });
+});
+
+describe("the offer from the keyboard", () => {
+  test("opens and closes from a button beside the reply, which says whether it is open", async () => {
+    await renderStarted();
+    expect(offerIsOpen("Hola!")).toBe(false);
+
+    fireEvent.click(optionsButton("Hola!"));
+    expect(offerIsOpen("Hola!")).toBe(true);
+    const offer = document.getElementById(optionsButton("Hola!").getAttribute("aria-controls")!)!;
+    expect(within(offer).getByRole("button", { name: LISTEN_BUTTON })).toBeTruthy();
+
+    fireEvent.click(optionsButton("Hola!"));
+    expect(offerIsOpen("Hola!")).toBe(false);
+    expect(screen.queryByRole("button", { name: LISTEN_BUTTON })).toBeNull();
+  });
+
+  test("leaves focus on its button, with the offer next in the tab order", async () => {
+    await renderStarted();
+    optionsButton("Hola!").focus();
+
+    fireEvent.click(optionsButton("Hola!"));
+
+    expect(document.activeElement).toBe(optionsButton("Hola!"));
+    const position = optionsButton("Hola!").compareDocumentPosition(
+      screen.getByRole("button", { name: LISTEN_BUTTON }),
+    );
+    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+  });
+
+  test("says when it is opened by tapping the reply", async () => {
+    await renderStarted();
+
+    tap("Hola!");
+
+    expect(offerIsOpen("Hola!")).toBe(true);
+  });
+
+  test("closes on Escape from inside the offer, and returns focus to its button", async () => {
+    await renderStarted();
+    fireEvent.click(optionsButton("Hola!"));
+    const listen = screen.getByRole("button", { name: LISTEN_BUTTON });
+    listen.focus();
+
+    pressEscape(listen);
+
+    expect(offerIsOpen("Hola!")).toBe(false);
+    expect(document.activeElement).toBe(optionsButton("Hola!"));
+  });
+
+  test("closes on Escape from its button", async () => {
+    await renderStarted();
+    optionsButton("Hola!").focus();
+    fireEvent.click(optionsButton("Hola!"));
+
+    pressEscape(optionsButton("Hola!"));
+
+    expect(offerIsOpen("Hola!")).toBe(false);
+    expect(document.activeElement).toBe(optionsButton("Hola!"));
+  });
+
+  test("closes when focus moves away from the offer and its button", async () => {
+    await renderStarted();
+    fireEvent.click(optionsButton("Hola!"));
+    screen.getByRole("button", { name: LISTEN_BUTTON }).focus();
+
+    act(() => input().focus());
+
+    expect(offerIsOpen("Hola!")).toBe(false);
+  });
+
+  test("stays open while focus moves between its button and the offer", async () => {
+    await renderStarted();
+    optionsButton("Hola!").focus();
+    fireEvent.click(optionsButton("Hola!"));
+
+    act(() => screen.getByRole("button", { name: LISTEN_BUTTON }).focus());
+    act(() => optionsButton("Hola!").focus());
+
+    expect(offerIsOpen("Hola!")).toBe(true);
+  });
+
+  test("moves to another reply whose button is pressed", async () => {
+    await renderStarted();
+    await send("Hello");
+    fireEvent.click(optionsButton("Hola!"));
+
+    fireEvent.click(optionsButton("Bon dia!"));
+
+    expect(offerIsOpen("Hola!")).toBe(false);
+    expect(offerIsOpen("Bon dia!")).toBe(true);
+  });
+
+  test("is pressed without the press closing the offer as a press elsewhere would", async () => {
+    await renderStarted();
+    fireEvent.click(optionsButton("Hola!"));
+
+    fireEvent.pointerDown(optionsButton("Hola!"));
+    fireEvent.click(optionsButton("Hola!"));
+
+    // One press, one toggle: closed, not closed and opened again.
+    expect(offerIsOpen("Hola!")).toBe(false);
+  });
+
+  test("is not there beside a reply that has nothing to offer", async () => {
+    health = new Response("Unavailable", { status: 503 });
+    await renderStarted();
+    await settle();
+
+    const row = screen.getByText("Hola!").closest("[data-reply]") as HTMLElement;
+    expect(within(row).queryByRole("button", { name: OPTIONS_BUTTON })).toBeNull();
+  });
+
+  test("can't be pressed while a reply is being written", async () => {
+    await renderStarted();
+    coldStart();
+    await send("Hello");
+
+    expect(optionsButton("Hola!").disabled).toBe(true);
+  });
+
+  test("finds no accessibility faults with the offer open", async () => {
+    await renderStarted();
+    await send("Hello");
+    fireEvent.click(optionsButton("Bon dia!"));
+
+    expect(await accessibilityFaults()).toEqual([]);
   });
 });

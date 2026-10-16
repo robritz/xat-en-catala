@@ -82,6 +82,8 @@ async function isSpeechHealthy(): Promise<boolean> {
 const BOOKMARK_ICON =
   "M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2zm0 15-5-2.18L7 18V5h10v13z";
 const BOOKMARKED_ICON = "M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z";
+const OPTIONS_ICON =
+  "M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z";
 const NEW_CONVERSATION_ICON =
   "M22 4c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14l4 4V4zm-5 7h-4v4h-2v-4H7V9h4V5h2v4h4v2z";
 const SAVED_ICON =
@@ -235,14 +237,29 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
     return { message: messageText(message), reply: messageText(messages[at]) };
   }
 
-  // Tapping a reply opens the offer under it, and tapping it again closes it.
+  // Whether a reply has anything to offer. The reply being spoken already has
+  // its mute button, and one that can't be spoken has no button. Unless it
+  // can be saved, there is nothing more.
+  function hasOffer(id: string): boolean {
+    return (id !== speakingId && speechAvailable) || exchangeOf(id) !== null;
+  }
+
+  // Tapping a reply, or pressing the button beside it, opens the offer under
+  // it, and doing so again closes it.
   function toggleOffer(id: string) {
     if (offer?.id === id) return setOffer(null);
-    // The reply being spoken already has its mute button, and one that can't
-    // be spoken has no button. Unless it can be saved, there is nothing more
-    // to offer.
-    if ((id === speakingId || !speechAvailable) && !exchangeOf(id)) return;
-    setOffer({ id, status: "offered" });
+    if (hasOffer(id)) setOffer({ id, status: "offered" });
+  }
+
+  // The button beside a reply, and the offer it opens, by the reply's id.
+  const offerIds = useId();
+  const optionsButtonId = (id: string) => `${offerIds}-button-${id}`;
+  const offerElementId = (id: string) => `${offerIds}-offer-${id}`;
+
+  // Closes the offer from the keyboard, leaving focus where it opened.
+  function closeOffer(id: string) {
+    setOffer(null);
+    document.getElementById(optionsButtonId(id))?.focus();
   }
 
   // Speaks the text. The id is the source of the sound, and `update` is told
@@ -361,6 +378,7 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
     const isSaved = exchange !== null && saved.some((one) => isSameExchange(one, exchange));
     return (
       <div
+        id={offerElementId(m.id)}
         ref={held ? offerRef : undefined}
         // A mute button left behind by an offer that was dismissed isn't one.
         data-offer={held ? "" : undefined}
@@ -503,21 +521,52 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
                 </div>
               </div>
             ) : (
-              <div key={m.id} className="flex flex-col items-start gap-1">
-                {/* Tapping a reply offers to speak it and to save it. */}
-                <div
-                  data-reply
-                  onClick={(e) => {
-                    // Not for a link, which the tap follows, nor for a drag
-                    // that selected some of the text.
-                    if ((e.target as Element).closest("a")) return;
-                    if (!window.getSelection()?.isCollapsed) return;
-                    // Not while a reply is still being written.
-                    if (!loading) toggleOffer(m.id);
-                  }}
-                  className="markdown max-w-[85%] rounded-2xl bg-surface px-4 py-2"
-                >
-                  <Reply text={messageText(m)} />
+              <div
+                key={m.id}
+                className="flex flex-col items-start gap-1"
+                onKeyDown={(e) => {
+                  if (e.key === "Escape" && offer?.id === m.id) closeOffer(m.id);
+                }}
+                // Focus moving to something else closes the offer, as a press
+                // elsewhere does. Focus lost to nothing, as when a pressed
+                // button is replaced, leaves it open.
+                onBlur={(e) => {
+                  const to = e.relatedTarget;
+                  if (offer?.id === m.id && to && !e.currentTarget.contains(to)) setOffer(null);
+                }}
+              >
+                {/* Tapping a reply offers to speak it and to save it. A press
+                    on the button beside it is a press on the reply too, so
+                    that it doesn't count as a press elsewhere. */}
+                <div data-reply className="flex max-w-[85%] items-start gap-1">
+                  <div
+                    onClick={(e) => {
+                      // Not for a link, which the tap follows, nor for a drag
+                      // that selected some of the text.
+                      if ((e.target as Element).closest("a")) return;
+                      if (!window.getSelection()?.isCollapsed) return;
+                      // Not while a reply is still being written.
+                      if (!loading) toggleOffer(m.id);
+                    }}
+                    className="markdown min-w-0 rounded-2xl bg-surface px-4 py-2"
+                  >
+                    <Reply text={messageText(m)} />
+                  </div>
+                  {/* The way to the offer for those who can't tap. */}
+                  {hasOffer(m.id) && (
+                    <button
+                      type="button"
+                      id={optionsButtonId(m.id)}
+                      onClick={() => toggleOffer(m.id)}
+                      disabled={loading}
+                      aria-label="Opcions de la resposta"
+                      aria-expanded={offer?.id === m.id}
+                      aria-controls={offerElementId(m.id)}
+                      className="shrink-0 p-0.5 text-muted hover:text-foreground disabled:opacity-40"
+                    >
+                      <Icon path={OPTIONS_ICON} />
+                    </button>
+                  )}
                 </div>
                 {optionsUnder(m)}
               </div>
