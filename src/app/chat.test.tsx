@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
+import axe from "axe-core";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { type ReplyUsage, resetTokenUsage, useTokenUsage } from "@/lib/token-usage";
 import Chat from "./chat";
@@ -277,6 +278,15 @@ function sentTranslateFlags() {
   return JSON.parse(init!.body as string).messages.map(
     (m: { metadata?: { translate?: boolean } }) => m.metadata?.translate === true,
   );
+}
+
+// The faults axe finds in the page as it stands. jsdom computes no colours,
+// so contrast is left to be checked by hand.
+async function accessibilityFaults() {
+  const { violations } = await axe.run(document.body, {
+    rules: { "color-contrast": { enabled: false } },
+  });
+  return violations.map(({ id, nodes }) => `${id}: ${nodes.map((node) => node.html).join(", ")}`);
 }
 
 function translateToggle() {
@@ -2017,5 +2027,63 @@ describe("the saved exchanges in two tabs", () => {
     changeInAnotherTab((exchanges) => [deleted, ...exchanges]);
     hearOfAnotherTab();
     expect(savedRow("Two").getAttribute("aria-expanded")).toBe("false");
+  });
+});
+
+describe("accessibility", () => {
+  test("names the message field for what it is for, by whether it is translating", async () => {
+    await renderStarted();
+    expect(screen.getByRole("textbox", { name: "Missatge" })).toBe(input());
+
+    fireEvent.click(translateToggle());
+    expect(screen.getByRole("textbox", { name: "Text per traduir" })).toBe(input());
+  });
+
+  test("finds no faults before a session has started", async () => {
+    render(<Chat initiallyUnlocked />);
+    await settle();
+
+    expect(await accessibilityFaults()).toEqual([]);
+  });
+
+  test("finds no faults in a conversation", async () => {
+    await renderStarted();
+    await send("Good morning");
+
+    expect(await accessibilityFaults()).toEqual([]);
+  });
+
+  test("finds no faults among the saved exchanges, with nothing saved", async () => {
+    await renderStarted();
+    openSaved();
+
+    expect(await accessibilityFaults()).toEqual([]);
+  });
+
+  test("finds no faults among the saved exchanges, with a row open", async () => {
+    await renderSaved("One", "Two");
+    fireEvent.click(savedRow("Two"));
+
+    expect(await accessibilityFaults()).toEqual([]);
+  });
+
+  // A message may be in any language. Marked unknown, it isn't read in a
+  // Catalan voice. Replies are left to the page, which is in Catalan and isn't
+  // rendered here.
+  test("marks a message in the conversation as of unknown language, and not its reply", async () => {
+    await renderStarted();
+    await send("Good morning");
+
+    expect(screen.getByText("Good morning").closest("[lang]")?.getAttribute("lang")).toBe("");
+    expect(screen.getByText("Bon dia!").closest("[lang]")).toBeNull();
+  });
+
+  test("marks a saved message as of unknown language, closed and open, and not its reply", async () => {
+    await renderSaved("Good morning");
+    expect(savedRow("Good morning").closest("[lang]")?.getAttribute("lang")).toBe("");
+
+    fireEvent.click(savedRow("Good morning"));
+    expect(savedRow("Good morning").closest("[lang]")?.getAttribute("lang")).toBe("");
+    expect(screen.getByText("Resposta a Good morning").closest("[lang]")).toBeNull();
   });
 });

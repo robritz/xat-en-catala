@@ -2,7 +2,7 @@
 
 import { useChat } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import {
   type Exchange,
   isSameExchange,
@@ -117,6 +117,7 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
     });
   const loading = status === "submitted" || status === "streaming";
   const inputRef = useRef<HTMLInputElement>(null);
+  const inputLabelId = useId();
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [offer, setOffer] = useState<Offer | null>(null);
@@ -496,7 +497,8 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
           {visibleMessages.map((m) =>
             m.role === "user" ? (
               <div key={m.id} className="flex justify-end">
-                <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-blue-600 px-4 py-2 text-white">
+                {/* A message may be in any language, so it is marked unknown. */}
+                <div lang="" className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-blue-600 px-4 py-2 text-white">
                   {messageText(m)}
                 </div>
               </div>
@@ -542,12 +544,19 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
       )}
 
       {/* Hidden, not removed, behind the saved exchanges: the input keeps what
-          was typed and isn't focused afresh on return. */}
+          was typed and isn't focused afresh on return. Named by the field's
+          label, so that it is a landmark and the field is found in one. */}
       <form
         onSubmit={handleSubmit}
+        aria-labelledby={inputLabelId}
         hidden={showingSaved}
         className={`${showingSaved ? "hidden" : "flex"} shrink-0 gap-2 border-t border-black/10 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] dark:border-white/10`}
       >
+        {/* The placeholder and the Envia button say what the field is for to
+            the eye; the label says it to a screen reader. */}
+        <label id={inputLabelId} htmlFor={`${inputLabelId}-field`} className="sr-only">
+          {translating ? "Text per traduir" : "Missatge"}
+        </label>
         <button
           type="button"
           aria-label="Tradueix"
@@ -578,6 +587,7 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
           </svg>
         </button>
         <input
+          id={`${inputLabelId}-field`}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder={translating ? "Escriu un text per traduir…" : "Escriu un missatge…"}

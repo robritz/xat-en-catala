@@ -75,8 +75,10 @@ export default function SavedExchanges({
             const sound = soundOf(exchange);
             return (
               <li key={JSON.stringify([exchange.message, exchange.reply])}>
-                {/* A long message is cut to one line until its row is opened. */}
+                {/* A long message is cut to one line until its row is opened. It
+                    may be in any language, so it is marked unknown. */}
                 <button
+                  lang=""
                   aria-expanded={isOpen}
                   onClick={() => setOpen(isOpen ? null : exchange)}
                   className={`block w-full py-3 text-left ${isOpen ? "whitespace-pre-wrap font-medium" : "truncate"}`}
