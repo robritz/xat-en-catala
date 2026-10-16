@@ -2232,6 +2232,29 @@ describe("the offer from the keyboard", () => {
     expect(within(row).queryByRole("button", { name: OPTIONS_BUTTON })).toBeNull();
   });
 
+  test("stays beside a reply whose offer is open, even once the reply is speaking", async () => {
+    await renderStarted();
+    fireEvent.click(optionsButton("Hola!"));
+
+    await clickListen();
+
+    expect(offerIsOpen("Hola!")).toBe(true);
+  });
+
+  // Closed, the greeting being spoken has nothing to offer but its mute
+  // button, so the button beside it goes.
+  test("closes on Escape onto the mute button when it then has nothing to offer", async () => {
+    await renderStarted();
+    fireEvent.click(optionsButton("Hola!"));
+    await clickListen();
+
+    pressEscape(replyMute()!);
+
+    const row = screen.getByText("Hola!").closest("[data-reply]") as HTMLElement;
+    expect(within(row).queryByRole("button", { name: OPTIONS_BUTTON })).toBeNull();
+    expect(document.activeElement).toBe(replyMute());
+  });
+
   test("can't be pressed while a reply is being written", async () => {
     await renderStarted();
     coldStart();
@@ -2420,6 +2443,17 @@ describe("a reply that can't be had", () => {
     expect(screen.queryByText("Bon d")).toBeNull();
   });
 
+  test("puts the keyboard in the message field once it asks again", async () => {
+    await renderStarted();
+    answer = failure("Upstream error");
+    await send("Hello");
+    retry().focus();
+
+    await pressRetry();
+
+    expect(document.activeElement).toBe(input());
+  });
+
   test("asks again for a translation as a translation", async () => {
     await renderStarted();
     fireEvent.click(translateToggle());
@@ -2555,6 +2589,17 @@ describe("undoing a deletion", () => {
     undo();
 
     expect(savedMessages()).toEqual(["Two", "One"]);
+  });
+
+  test("still puts the keyboard on the row at its place when it was saved again meanwhile", async () => {
+    await renderSaved("One", "Two");
+    deleteSaved("One");
+    changeInAnotherTab((exchanges) => [{ message: "One", reply: "Resposta a One" }, ...exchanges]);
+    hearOfAnotherTab();
+
+    undo();
+
+    expect(document.activeElement).toBe(savedRow("One"));
   });
 
   test("says so when the saved exchange can't be put back", async () => {

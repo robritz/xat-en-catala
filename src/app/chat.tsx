@@ -99,6 +99,14 @@ function failureMessage(error: Error): string {
   return "La IA no ha pogut respondre. Torna-ho a provar.";
 }
 
+// The ids of the button beside a reply and of the offer it opens.
+function optionsButtonId(prefix: string, replyId: string): string {
+  return `${prefix}-button-${replyId}`;
+}
+function offerElementId(prefix: string, replyId: string): string {
+  return `${prefix}-offer-${replyId}`;
+}
+
 async function unlock(phrase: string): Promise<boolean> {
   const res = await fetch("/api/unlock", {
     method: "POST",
@@ -265,16 +273,31 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
     if (hasOffer(id)) setOffer({ id, status: "offered" });
   }
 
-  // The button beside a reply, and the offer it opens, by the reply's id.
-  const offerIds = useId();
-  const optionsButtonId = (id: string) => `${offerIds}-button-${id}`;
-  const offerElementId = (id: string) => `${offerIds}-offer-${id}`;
+  // What the ids of the buttons beside the replies, and of their offers,
+  // begin with.
+  const offerIdPrefix = useId();
 
-  // Closes the offer from the keyboard, leaving focus where it opened.
+  // The reply whose offer was closed from the keyboard, for focus to return
+  // to once it has closed.
+  const closedFromKeyboard = useRef<string>(null);
+
+  // Closes the offer from the keyboard.
   function closeOffer(id: string) {
+    closedFromKeyboard.current = id;
     setOffer(null);
-    document.getElementById(optionsButtonId(id))?.focus();
   }
+
+  // Focus returns to the button beside the reply. A reply left with nothing
+  // to offer has no button, only the mute button under it, so it goes there.
+  useLayoutEffect(() => {
+    const id = closedFromKeyboard.current;
+    if (!id) return;
+    closedFromKeyboard.current = null;
+    const button =
+      document.getElementById(optionsButtonId(offerIdPrefix, id)) ??
+      document.getElementById(offerElementId(offerIdPrefix, id))?.querySelector("button");
+    button?.focus();
+  }, [offer, offerIdPrefix]);
 
   // Speaks the text. The id is the source of the sound, and `update` is told
   // how far it has got.
@@ -392,7 +415,7 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
     const isSaved = exchange !== null && saved.some((one) => isSameExchange(one, exchange));
     return (
       <div
-        id={offerElementId(m.id)}
+        id={offerElementId(offerIdPrefix, m.id)}
         ref={held ? offerRef : undefined}
         // A mute button left behind by an offer that was dismissed isn't one.
         data-offer={held ? "" : undefined}
@@ -573,16 +596,18 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
                     >
                       <Reply text={messageText(m)} />
                     </div>
-                    {/* The way to the offer for those who can't tap. */}
-                    {hasOffer(m.id) && (
+                    {/* The way to the offer for those who can't tap. It stays
+                        while its offer is open, so that Escape has somewhere
+                        to return to. */}
+                    {(hasOffer(m.id) || offer?.id === m.id) && (
                       <button
                         type="button"
-                        id={optionsButtonId(m.id)}
+                        id={optionsButtonId(offerIdPrefix, m.id)}
                         onClick={() => toggleOffer(m.id)}
                         disabled={loading}
                         aria-label="Opcions de la resposta"
                         aria-expanded={offer?.id === m.id}
-                        aria-controls={offerElementId(m.id)}
+                        aria-controls={offerElementId(offerIdPrefix, m.id)}
                         className="shrink-0 p-0.5 text-muted hover:text-foreground disabled:opacity-40"
                       >
                         <Icon path={OPTIONS_ICON} />
@@ -615,6 +640,8 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
                     onClick={() => {
                       clearError();
                       regenerate();
+                      // The button goes with the error.
+                      inputRef.current?.focus();
                     }}
                     className={OFFER_BUTTON_STYLE}
                   >

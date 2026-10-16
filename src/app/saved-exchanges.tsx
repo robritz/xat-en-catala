@@ -54,10 +54,12 @@ export default function SavedExchanges({
   // a row would otherwise leave it on a button that is gone.
   const focusAfterChange = useRef<(() => void) | null>(null);
 
+  // An undo that changes nothing, because the exchange was saved again,
+  // still removes the button that had focus, so this follows `deleted` too.
   useLayoutEffect(() => {
     focusAfterChange.current?.();
     focusAfterChange.current = null;
-  }, [exchanges]);
+  }, [exchanges, deleted]);
 
   // Once the list has changed, puts the keyboard's focus on the row at the
   // place, or the last row if there are fewer.
