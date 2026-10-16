@@ -134,7 +134,7 @@ Saving happens in the conversation: tapping a reply shows a speaker button under
 - The list is an accordion built as its own component. Each row has a heading button showing the message on one truncated line, which reports its expanded state, and up and down buttons named `Mou amunt` and `Mou avall`. Up is disabled on the first row and down on the last.
 - At most one row is open. Opening a row closes the one that was open. All rows are closed when the list is opened. Which row is open follows the exchange when it is moved.
 - An open row shows the message in full, then the reply rendered through the same Markdown rendering as a reply in the conversation, with the same rules: links open in a new tab and images are dropped. Under the reply are a speaker button and a delete button named `Suprimeix`.
-- Deleting removes the saved exchange at once. There is no confirmation and no undo.
+- Deleting removes the saved exchange at once. There is no confirmation. It can be undone, as `docs/specs/accessibility-aa.md` describes; this spec first had no undo.
 - With nothing saved, the list shows: `Encara no has desat res. Toca una resposta i després el marcador per desar-la.`
 - Tapping a reply in the list does nothing; its options are always shown in the open row.
 
@@ -179,7 +179,7 @@ Saving happens in the conversation: tapping a reply shows a speaker button under
 - Editing a saved exchange.
 - Copying to the clipboard, or sending a saved message into the conversation again.
 - Searching, filtering, grouping or tagging saved exchanges.
-- Confirmation or undo for deletion.
+- Confirmation for deletion. Undo was out of scope here and was added later by `docs/specs/accessibility-aa.md`.
 - Saving the greeting, or a reply on its own without a message.
 - A limit on the number of saved exchanges.
 - Protection against the browser evicting stored data.

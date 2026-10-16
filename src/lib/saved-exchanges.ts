@@ -97,3 +97,14 @@ export function saveExchange(exchange: Exchange): boolean {
 export function unsaveExchange(exchange: Exchange): boolean {
   return change((exchanges) => exchanges.filter((saved) => !isSameExchange(saved, exchange)));
 }
+
+// Puts a deleted exchange back at the place it was deleted from, or at the
+// end if the list is now shorter than that. An exchange saved again in the
+// meantime is left where it is. Returns whether that could be stored.
+export function restoreExchange(exchange: Exchange, place: number): boolean {
+  return change((exchanges) =>
+    exchanges.some((saved) => isSameExchange(saved, exchange))
+      ? exchanges
+      : exchanges.toSpliced(place, 0, exchange),
+  );
+}

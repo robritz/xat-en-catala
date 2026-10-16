@@ -20,6 +20,9 @@ const DELETE_BUTTON = "Suprimeix";
 const NO_CONNECTION = "No s'ha pogut connectar. Comprova la connexió i torna-ho a provar.";
 const NO_REPLY = "La IA no ha pogut respondre. Torna-ho a provar.";
 const RETRY_BUTTON = "Torna-ho a provar";
+const UNDO_BUTTON = "Desfés";
+const DELETED = "S'ha suprimit.";
+const RESTORE_FAILURE = "No s'ha pogut recuperar.";
 const OPTIONS_BUTTON = "Opcions de la resposta";
 const SAVE_FAILURE = "No s'ha pogut desar.";
 const NOTHING_SAVED =
@@ -2445,6 +2448,129 @@ describe("a reply that can't be had", () => {
     await renderStarted();
     answer = failure("Upstream error");
     await send("Hello");
+
+    expect(await accessibilityFaults()).toEqual([]);
+  });
+});
+
+describe("undoing a deletion", () => {
+  function deleteSaved(message: string) {
+    fireEvent.click(savedRow(message));
+    fireEvent.click(savedRowButton(message, DELETE_BUTTON));
+  }
+
+  function undo() {
+    fireEvent.click(screen.getByRole("button", { name: UNDO_BUTTON }));
+  }
+
+  test("says the saved exchange was deleted, in a region that is announced, with a way to undo it", async () => {
+    await renderSaved("One", "Two");
+
+    deleteSaved("One");
+
+    const notice = screen.getAllByRole("status").find((status) => status.textContent?.includes(DELETED))!;
+    expect(within(notice).getByRole("button", { name: UNDO_BUTTON })).toBeTruthy();
+  });
+
+  test("still moves the keyboard to the row that takes the deleted one's place", async () => {
+    await renderSaved("One", "Two", "Three");
+
+    deleteSaved("Two");
+
+    expect(document.activeElement).toBe(savedRow("Three"));
+  });
+
+  test("puts the saved exchange back where it was, and the notice goes", async () => {
+    await renderSaved("One", "Two", "Three");
+    deleteSaved("Two");
+
+    undo();
+
+    expect(savedMessages()).toEqual(["One", "Two", "Three"]);
+    expect(screen.queryByText(DELETED)).toBeNull();
+    expect(document.activeElement).toBe(savedRow("Two"));
+  });
+
+  test("puts it back at the end when the list has since become shorter than its place", async () => {
+    await renderSaved("One", "Two", "Three");
+    deleteSaved("Three");
+    changeInAnotherTab((exchanges) => exchanges.filter((one) => one.message !== "One"));
+    hearOfAnotherTab();
+
+    undo();
+
+    expect(savedMessages()).toEqual(["Two", "Three"]);
+  });
+
+  test("survives a later session once undone", async () => {
+    await renderSaved("One", "Two");
+    deleteSaved("One");
+    undo();
+
+    cleanup();
+    render(<Chat initiallyUnlocked />);
+    openSaved();
+
+    expect(savedMessages()).toEqual(["One", "Two"]);
+  });
+
+  test("lets only the newest deletion be undone", async () => {
+    await renderSaved("One", "Two", "Three");
+    deleteSaved("One");
+    deleteSaved("Three");
+
+    expect(screen.getAllByRole("button", { name: UNDO_BUTTON })).toHaveLength(1);
+    undo();
+
+    expect(savedMessages()).toEqual(["Two", "Three"]);
+  });
+
+  test("is no longer offered once the list is left", async () => {
+    await renderSaved("One", "Two");
+    deleteSaved("One");
+
+    backToChat();
+    openSaved();
+
+    expect(screen.queryByRole("button", { name: UNDO_BUTTON })).toBeNull();
+    expect(screen.queryByText(DELETED)).toBeNull();
+  });
+
+  test("is offered even when the last saved exchange was deleted", async () => {
+    await renderSaved("One");
+
+    deleteSaved("One");
+    expect(screen.getByText(NOTHING_SAVED)).toBeTruthy();
+    undo();
+
+    expect(savedMessages()).toEqual(["One"]);
+  });
+
+  test("changes nothing when the exchange has been saved again meanwhile", async () => {
+    await renderSaved("One", "Two");
+    deleteSaved("One");
+    changeInAnotherTab((exchanges) => [...exchanges, { message: "One", reply: "Resposta a One" }]);
+    hearOfAnotherTab();
+
+    undo();
+
+    expect(savedMessages()).toEqual(["Two", "One"]);
+  });
+
+  test("says so when the saved exchange can't be put back", async () => {
+    await renderSaved("One", "Two");
+    deleteSaved("One");
+    refuseWrites();
+
+    undo();
+
+    expect(screen.getByText(RESTORE_FAILURE)).toBeTruthy();
+    expect(savedMessages()).toEqual(["Two"]);
+  });
+
+  test("finds no accessibility faults with the notice shown", async () => {
+    await renderSaved("One", "Two");
+    deleteSaved("One");
 
     expect(await accessibilityFaults()).toEqual([]);
   });
