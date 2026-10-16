@@ -89,6 +89,16 @@ const NEW_CONVERSATION_ICON =
 const SAVED_ICON =
   "M19 18l2 1V3c0-1.1-.9-2-2-2H8.99C7.89 1 7 1.9 7 3h10c1.1 0 2 .9 2 2v13zM15 5H5c-1.1 0-2 .9-2 2v16l7-3 7 3V7c0-1.1-.9-2-2-2z";
 
+// What a failure is called to the user. Fetch rejects with a TypeError only
+// when the network can't be reached; anything else came from the server or
+// the model host, and what it said is meant for the logs.
+function failureMessage(error: Error): string {
+  if (error instanceof TypeError) {
+    return "No s'ha pogut connectar. Comprova la connexió i torna-ho a provar.";
+  }
+  return "La IA no ha pogut respondre. Torna-ho a provar.";
+}
+
 async function unlock(phrase: string): Promise<boolean> {
   const res = await fetch("/api/unlock", {
     method: "POST",
@@ -107,7 +117,7 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
   // The reply the model stopped writing because its context window was full.
   // The model host cuts such a reply mid-sentence and reports no error.
   const [cutShortId, setCutShortId] = useState<string | null>(null);
-  const { messages, sendMessage, setMessages, status, error, clearError } =
+  const { messages, sendMessage, regenerate, setMessages, status, error, clearError } =
     useChat<ChatMessage>({
       // The session has started once the model has answered the greeting.
       onFinish: ({ message, isAbort, isDisconnect, isError, finishReason }) => {
@@ -197,6 +207,10 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
       current = false;
     };
   }, [unlocked]);
+
+  useEffect(() => {
+    if (error) console.error(error);
+  }, [error]);
 
   // The input is disabled until the session starts, so it can't autofocus.
   useEffect(() => {
@@ -591,9 +605,25 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
               </div>
             )}
           </div>
-          {error && (
-            <p className="text-center text-sm text-danger">Error: {error.message}</p>
-          )}
+          <div role="alert" className="empty:m-0">
+            {error && (
+              <div className="flex flex-col items-center gap-2">
+                <p className="text-center text-sm text-danger">{failureMessage(error)}</p>
+                {/* The greeting has the start button to try again with. */}
+                {started && (
+                  <button
+                    onClick={() => {
+                      clearError();
+                      regenerate();
+                    }}
+                    className={OFFER_BUTTON_STYLE}
+                  >
+                    Torna-ho a provar
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
           {/* Only while that reply is the newest: a later one came out whole. */}
           <div role="status" className="empty:m-0">
             {cutShortId !== null && messages.at(-1)?.id === cutShortId && (

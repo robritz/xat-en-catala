@@ -17,6 +17,9 @@ const NEW_BUTTON = "Nova conversa";
 const SAVED_BUTTON = "Desats";
 const BACK_BUTTON = "Torna al xat";
 const DELETE_BUTTON = "Suprimeix";
+const NO_CONNECTION = "No s'ha pogut connectar. Comprova la connexió i torna-ho a provar.";
+const NO_REPLY = "La IA no ha pogut respondre. Torna-ho a provar.";
+const RETRY_BUTTON = "Torna-ho a provar";
 const OPTIONS_BUTTON = "Opcions de la resposta";
 const SAVE_FAILURE = "No s'ha pogut desar.";
 const NOTHING_SAVED =
@@ -415,7 +418,7 @@ describe("starting a session", () => {
 
     await clickStart();
 
-    expect(screen.getByText("Error: Upstream error")).toBeDefined();
+    expect(screen.getByText(NO_REPLY)).toBeDefined();
     expect(screen.queryByText(WAKE_MESSAGE)).toBeNull();
     expect(input().disabled).toBe(true);
 
@@ -423,7 +426,7 @@ describe("starting a session", () => {
     await clickStart();
 
     expect(screen.getByText("Hola!")).toBeDefined();
-    expect(screen.queryByText("Error: Upstream error")).toBeNull();
+    expect(screen.queryByText(NO_REPLY)).toBeNull();
     expect(sentConversations().at(-1)).toEqual([{ role: "user", content: GREETING }]);
   });
 });
@@ -462,7 +465,7 @@ describe("chatting", () => {
 
     await send("Hello");
 
-    expect(screen.getByText("Error: Upstream error")).toBeDefined();
+    expect(screen.getByText(NO_REPLY)).toBeDefined();
   });
 
   test("shows an error reported in the middle of the stream", async () => {
@@ -475,7 +478,7 @@ describe("chatting", () => {
 
     await send("Hello");
 
-    expect(screen.getByText("Error: Upstream error")).toBeDefined();
+    expect(screen.getByText(NO_REPLY)).toBeDefined();
   });
 
   test("says so when a reply was cut short for want of room", async () => {
@@ -2318,5 +2321,131 @@ describe("what the chat says to a screen reader", () => {
     await send("Explica'm un conte");
 
     expect(isAnnouncedAsStatus(CUT_SHORT)).toBe(true);
+  });
+});
+
+describe("a reply that can't be had", () => {
+  function retry() {
+    return screen.getByRole("button", { name: RETRY_BUTTON });
+  }
+
+  async function pressRetry() {
+    await act(async () => {
+      fireEvent.click(retry());
+    });
+    await settle();
+  }
+
+  test("says in Catalan that the network couldn't be reached", async () => {
+    await renderStarted();
+    answer = Promise.reject(new TypeError("Failed to fetch"));
+
+    await send("Hello");
+
+    expect(screen.getByText(NO_CONNECTION)).toBeTruthy();
+    expect(screen.queryByText(/Failed to fetch/)).toBeNull();
+  });
+
+  test("says in Catalan that the model couldn't reply, never what the server said", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    await renderStarted();
+    answer = failure("Upstream error");
+
+    await send("Hello");
+
+    expect(screen.getByText(NO_REPLY)).toBeTruthy();
+    expect(screen.queryByText(/Upstream error/)).toBeNull();
+  });
+
+  test("still logs what went wrong", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    await renderStarted();
+    answer = failure("Upstream error");
+
+    await send("Hello");
+
+    expect(log.mock.calls.flat().map(String).join(" ")).toContain("Upstream error");
+  });
+
+  test("says it in a region that is announced at once", async () => {
+    await renderStarted();
+    answer = failure("Upstream error");
+
+    await send("Hello");
+
+    const alert = screen.getByRole("alert");
+    expect(within(alert).getByText(NO_REPLY)).toBeTruthy();
+    expect(within(alert).getByRole("button", { name: RETRY_BUTTON })).toBeTruthy();
+  });
+
+  test("asks again for the reply to the last message, without repeating it", async () => {
+    await renderStarted();
+    answer = failure("Upstream error");
+    await send("Hello");
+
+    answer = reply("Bon dia!");
+    await pressRetry();
+
+    expect(screen.getByText("Bon dia!")).toBeTruthy();
+    expect(screen.queryByText(NO_REPLY)).toBeNull();
+    expect(screen.getAllByText("Hello")).toHaveLength(1);
+    expect(sentConversations().at(-1)!.map(({ content }: { content: string }) => content)).toEqual([
+      GREETING,
+      "Hola!",
+      "Hello",
+    ]);
+  });
+
+  test("asks again for a reply that failed partway, leaving none of the failed one", async () => {
+    await renderStarted();
+    answer = createUIMessageStreamResponse({
+      stream: createUIMessageStream({
+        execute({ writer }) {
+          writer.write({ type: "start" });
+          writer.write({ type: "text-start", id: "t" });
+          writer.write({ type: "text-delta", id: "t", delta: "Bon d" });
+          writer.write({ type: "error", errorText: "Upstream error" });
+        },
+      }),
+    });
+    await send("Hello");
+
+    answer = reply("Bon dia!");
+    await pressRetry();
+
+    expect(screen.getByText("Bon dia!")).toBeTruthy();
+    expect(screen.queryByText("Bon d")).toBeNull();
+  });
+
+  test("asks again for a translation as a translation", async () => {
+    await renderStarted();
+    fireEvent.click(translateToggle());
+    answer = failure("Upstream error");
+    await send("Good morning");
+    fireEvent.click(translateToggle());
+
+    answer = reply("Bon dia");
+    await pressRetry();
+
+    expect(sentTranslateFlags().at(-1)).toBe(true);
+  });
+
+  test("offers no retry when the greeting fails, which has its own way to start again", async () => {
+    answer = failure("Upstream error");
+    render(<Chat initiallyUnlocked />);
+
+    await clickStart();
+
+    expect(screen.getByText(NO_REPLY)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: RETRY_BUTTON })).toBeNull();
+    expect(screen.getByRole("button", { name: START_BUTTON })).toBeTruthy();
+  });
+
+  test("finds no accessibility faults with an error shown", async () => {
+    await renderStarted();
+    answer = failure("Upstream error");
+    await send("Hello");
+
+    expect(await accessibilityFaults()).toEqual([]);
   });
 });
