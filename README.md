@@ -1,6 +1,6 @@
 # Xat en català
 
-A proof-of-concept chatbot that replies in [Catalan](https://en.wikipedia.org/wiki/Catalan_language), no matter which language you write in, to help aid in learning the language. It switches to another language only when you ask it to, and translates what you write into Catalan while the translation toggle is on. It's a Next.js app built on the [Vercel AI SDK](https://ai-sdk.dev) that talks to [Salamandra 7B Instruct](https://huggingface.co/BSC-LT/salamandra-7b-instruct-2606), quantised and served by [llama.cpp](https://github.com/ggml-org/llama.cpp) on [Google Cloud Run](https://cloud.google.com/run).
+A proof-of-concept chatbot that replies in [Catalan](https://en.wikipedia.org/wiki/Catalan_language), no matter which language you write in, to help aid in learning the language. It answers as a teacher would a student, pointing out a word, expression or piece of grammar worth learning in each reply. It switches to another language only when you ask it to, and translates what you write into Catalan while the translation toggle is on. It's a Next.js app built on the [Vercel AI SDK](https://ai-sdk.dev) that talks to [Salamandra 7B Instruct](https://huggingface.co/BSC-LT/salamandra-7b-instruct-2606), quantised and served by [llama.cpp](https://github.com/ggml-org/llama.cpp) on [Google Cloud Run](https://cloud.google.com/run).
 
 <img width="386" height="678" alt="image" src="https://github.com/user-attachments/assets/386b9a16-38ae-4f66-8f30-8f763b23c5d3" />
 

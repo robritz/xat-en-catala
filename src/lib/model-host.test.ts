@@ -74,6 +74,11 @@ test("both prompts ask for Catalan", () => {
   expect(TRANSLATION_PROMPT).toContain("català");
 });
 
+test("casts the model as a teacher of Catalan, helping the user learn it", () => {
+  expect(SYSTEM_PROMPT).toMatch(/teacher of Catalan/);
+  expect(SYSTEM_PROMPT).toMatch(/help the student (learn|understand)/);
+});
+
 // With a fifth, the vLLM worker that served the model before Cloud Run
 // answered 200 with an empty stream, which the AI SDK reports as "Response
 // stream ended without a finish reason".
