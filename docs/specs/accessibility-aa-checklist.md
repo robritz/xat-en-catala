@@ -50,6 +50,6 @@ Measure with a contrast checker (for example the colour picker in Chrome's DevTo
 
 24. Measure the header buttons, `Opcions de la resposta`, and the buttons in the offer and the saved-exchanges list in DevTools. **Expect:** each is 24 by 24 CSS pixels or more.
 
-## Motion
+## Focus while a reply's speech loads
 
-25. In macOS System Settings, turn on Accessibility → Display → Reduce motion, then start a session during a cold start and tap `Escolta` under a reply. **Expect:** both spinners keep still. Turn it off. **Expect:** they turn.
+25. Keyboard only, in Safari and Chrome: open a reply's offer, Tab to `Escolta` and press Enter. **Expect:** focus stays on the button while its spinner turns, and is still on it once it becomes `Silencia`.

@@ -35,11 +35,17 @@ export default function ListenButton({
       </button>
     );
   }
-  // Not dimmed as a disabled button is: the spinner says how far it has got,
-  // and must be seen as well as the icon it took the place of.
+  // Unavailable without being disabled, so that focus stays on the button
+  // pressed to hear the reply, which this is until it becomes the mute button.
+  // Nor is it dimmed: the spinner says how far it has got, and must be seen as
+  // well as the icon it took the place of.
   if (sound === "loading") {
     return (
-      <button disabled aria-label="Carregant…" className={OFFER_BUTTON_BASE_STYLE}>
+      <button
+        aria-disabled="true"
+        aria-label="Carregant…"
+        className={`${OFFER_BUTTON_BASE_STYLE} cursor-progress`}
+      >
         <Spinner />
       </button>
     );
