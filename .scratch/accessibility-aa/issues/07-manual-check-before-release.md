@@ -8,9 +8,9 @@ See `docs/specs/accessibility-aa.md`, section "Testing Decisions". Terms are def
 
 **Blocked by:** 02 — Legible in both themes, and big enough to hit; 03 — Open the offer from the keyboard; 04 — Hear what the chat is doing; 05 — Errors in Catalan, with a retry; 06 — Undo deleting a saved exchange.
 
-**Status:** ready-for-agent
+**Status:** waiting on the owner to run the checklist (`docs/specs/accessibility-aa-checklist.md`)
 
-- [ ] A checklist is written beside the spec, covering: keyboard only through every control in the chat and the **saved exchanges**; VoiceOver on iOS Safari and on macOS Safari through a **session**, a **reply**, the **offer**, an error with retry, and deleting and undoing a saved exchange; 200% zoom; 320 CSS pixels wide; contrast measured in both themes; visible focus on every control.
-- [ ] Each item names what to do and what should happen, so that it can be rerun before a later release.
+- [x] A checklist is written beside the spec, covering: keyboard only through every control in the chat and the **saved exchanges**; VoiceOver on iOS Safari and on macOS Safari through a **session**, a **reply**, the **offer**, an error with retry, and deleting and undoing a saved exchange; 200% zoom; 320 CSS pixels wide; contrast measured in both themes; visible focus on every control.
+- [x] Each item names what to do and what should happen, so that it can be rerun before a later release.
 - [ ] The checklist is run once against the merged work, and the result of each item is recorded in this ticket.
 - [ ] Any failure found is either fixed here, if small, or written up as its own ticket.

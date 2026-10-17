@@ -3,11 +3,29 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* Hints, status lines and icons: 4.5:1 or more on the background and on
+     the surface, as WCAG AA asks of text. */
+  --muted: #525252;
+  /* What a reply sits on. */
+  --surface: #f2f2f2;
+  /* Lines that only divide; nothing depends on seeing them. */
+  --rule: #e5e5e5;
+  /* The edge of a control: 3:1 or more on the background, as WCAG AA asks of
+     what shows where a control is. */
+  --outline: #737373;
+  --danger: #dc2626;
+  --accent: #2563eb;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-surface: var(--surface);
+  --color-rule: var(--rule);
+  --color-outline: var(--outline);
+  --color-danger: var(--danger);
+  --color-accent: var(--accent);
   --font-sans: var(--font-geist-sans);
 }
 
@@ -15,6 +33,10 @@
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
+    --muted: #a3a3a3;
+    --surface: #222222;
+    --rule: #262626;
+    --danger: #f87171;
   }
 }
 

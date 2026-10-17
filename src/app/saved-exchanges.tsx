@@ -5,6 +5,7 @@ import {
   type Exchange,
   isSameExchange,
   noSavedExchanges,
+  restoreExchange,
   savedExchanges,
   subscribeToSavedExchanges,
   unsaveExchange,
@@ -42,50 +43,94 @@ export default function SavedExchanges({
   // A row whose exchange has left the list, deleted in another tab perhaps,
   // is no longer open: saved again, it comes back closed.
   if (open !== null && !exchanges.some((exchange) => isSameExchange(open, exchange))) setOpen(null);
+  // The exchange last deleted and where it was, for as long as the deletion
+  // can be undone: until another is deleted or the list is left. `failed` is
+  // set when it was asked to be put back and couldn't be stored.
+  const [deleted, setDeleted] = useState<{ exchange: Exchange; place: number; failed?: boolean } | null>(
+    null,
+  );
   const listRef = useRef<HTMLUListElement>(null);
   // Where the keyboard's focus is to go once the list has changed. Deleting
   // a row would otherwise leave it on a button that is gone.
   const focusAfterChange = useRef<(() => void) | null>(null);
 
+  // An undo that changes nothing, because the exchange was saved again,
+  // still removes the button that had focus, so this follows `deleted` too.
   useLayoutEffect(() => {
     focusAfterChange.current?.();
     focusAfterChange.current = null;
-  }, [exchanges]);
+  }, [exchanges, deleted]);
 
-  function remove(exchange: Exchange, place: number) {
-    // To the row that takes its place, or the last row if it was the last.
+  // Once the list has changed, puts the keyboard's focus on the row at the
+  // place, or the last row if there are fewer.
+  function focusRowAfterChange(place: number) {
     focusAfterChange.current = () => {
       const rows = listRef.current?.querySelectorAll<HTMLButtonElement>("[aria-expanded]");
       rows?.[Math.min(place, rows.length - 1)]?.focus();
     };
+  }
+
+  function remove(exchange: Exchange, place: number) {
+    // To the row that takes its place.
+    focusRowAfterChange(place);
     // Refused by the browser: the row stays as it is.
-    if (!unsaveExchange(exchange)) focusAfterChange.current = null;
+    if (!unsaveExchange(exchange)) {
+      focusAfterChange.current = null;
+      return;
+    }
+    setDeleted({ exchange, place });
+  }
+
+  function undo() {
+    if (!deleted) return;
+    // To the row put back, where the undo button that had focus was.
+    focusRowAfterChange(deleted.place);
+    if (restoreExchange(deleted.exchange, deleted.place)) setDeleted(null);
+    else {
+      focusAfterChange.current = null;
+      setDeleted({ ...deleted, failed: true });
+    }
   }
 
   return (
     <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-2">
+      {/* There before it says anything, so that what it says is announced. */}
+      <div role="status">
+        {deleted && (
+          <div className="flex items-center gap-2 py-2">
+            <p className={`text-sm ${deleted.failed ? "text-danger" : "text-muted"}`}>
+              {deleted.failed ? "No s'ha pogut recuperar." : "S'ha suprimit."}
+            </p>
+            <button onClick={undo} className={OFFER_BUTTON_STYLE}>
+              Desfés
+            </button>
+          </div>
+        )}
+      </div>
       {exchanges.length === 0 ? (
-        <p className="px-6 pt-20 text-center text-black/40 dark:text-white/40">
+        <p className="px-6 pt-20 text-center text-muted">
           Encara no has desat res. Toca una resposta i després el marcador per desar-la.
         </p>
       ) : (
-        <ul ref={listRef} className="divide-y divide-black/10 dark:divide-white/10">
+        <ul ref={listRef} className="divide-y divide-rule">
           {exchanges.map((exchange, place) => {
             const isOpen = open !== null && isSameExchange(open, exchange);
             const sound = soundOf(exchange);
             return (
               <li key={JSON.stringify([exchange.message, exchange.reply])}>
-                {/* A long message is cut to one line until its row is opened. */}
+                {/* A long message is cut to one line until its row is opened. It
+                    may be in any language, so it is marked unknown. */}
                 <button
+                  lang=""
                   aria-expanded={isOpen}
                   onClick={() => setOpen(isOpen ? null : exchange)}
-                  className={`block w-full py-3 text-left ${isOpen ? "whitespace-pre-wrap font-medium" : "truncate"}`}
+                  className={`block w-full py-3 text-left ${isOpen ? "whitespace-pre-wrap wrap-anywhere font-medium" : "truncate"}`}
                 >
                   {exchange.message}
                 </button>
                 {isOpen && (
                   <div className="mb-3 flex flex-col items-start gap-1">
-                    <div className="markdown rounded-2xl bg-black/5 px-4 py-2 dark:bg-white/10">
+                    <div className="markdown rounded-2xl bg-surface px-4 py-2">
                       <Reply text={exchange.reply} />
                     </div>
                     <div className="flex items-center gap-2">

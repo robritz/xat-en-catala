@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
+import axe from "axe-core";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { type ReplyUsage, resetTokenUsage, useTokenUsage } from "@/lib/token-usage";
 import Chat from "./chat";
@@ -16,6 +17,13 @@ const NEW_BUTTON = "Nova conversa";
 const SAVED_BUTTON = "Desats";
 const BACK_BUTTON = "Torna al xat";
 const DELETE_BUTTON = "Suprimeix";
+const NO_CONNECTION = "No s'ha pogut connectar. Comprova la connexió i torna-ho a provar.";
+const NO_REPLY = "La IA no ha pogut respondre. Torna-ho a provar.";
+const RETRY_BUTTON = "Torna-ho a provar";
+const UNDO_BUTTON = "Desfés";
+const DELETED = "S'ha suprimit.";
+const RESTORE_FAILURE = "No s'ha pogut recuperar.";
+const OPTIONS_BUTTON = "Opcions de la resposta";
 const SAVE_FAILURE = "No s'ha pogut desar.";
 const NOTHING_SAVED =
   "Encara no has desat res. Toca una resposta i després el marcador per desar-la.";
@@ -279,6 +287,41 @@ function sentTranslateFlags() {
   );
 }
 
+// The button beside a reply that opens and closes the offer under it.
+function optionsButton(replyText: string) {
+  const row = screen.getByText(replyText).closest("[data-reply]") as HTMLElement;
+  return within(row).getByRole<HTMLButtonElement>("button", { name: OPTIONS_BUTTON });
+}
+
+// Whether the offer under a reply is open, as its button says.
+function offerIsOpen(replyText: string) {
+  return optionsButton(replyText).getAttribute("aria-expanded") === "true";
+}
+
+// Whether the conversation is marked busy, so that a reply being written
+// isn't read out until it is whole.
+function conversationIsBusy() {
+  return screen.getByRole("log").getAttribute("aria-busy") === "true";
+}
+
+// Whether the text is in a region whose changes are announced politely.
+function isAnnouncedAsStatus(text: string) {
+  return screen.getAllByRole("status").some((status) => status.textContent?.includes(text));
+}
+
+function pressEscape(element: Element) {
+  fireEvent.keyDown(element, { key: "Escape" });
+}
+
+// The faults axe finds in the page as it stands. jsdom computes no colours,
+// so contrast is left to be checked by hand.
+async function accessibilityFaults() {
+  const { violations } = await axe.run(document.body, {
+    rules: { "color-contrast": { enabled: false } },
+  });
+  return violations.map(({ id, nodes }) => `${id}: ${nodes.map((node) => node.html).join(", ")}`);
+}
+
 function translateToggle() {
   return screen.getByRole<HTMLButtonElement>("button", { name: TRANSLATE_TOGGLE });
 }
@@ -378,7 +421,7 @@ describe("starting a session", () => {
 
     await clickStart();
 
-    expect(screen.getByText("Error: Upstream error")).toBeDefined();
+    expect(screen.getByText(NO_REPLY)).toBeDefined();
     expect(screen.queryByText(WAKE_MESSAGE)).toBeNull();
     expect(input().disabled).toBe(true);
 
@@ -386,7 +429,7 @@ describe("starting a session", () => {
     await clickStart();
 
     expect(screen.getByText("Hola!")).toBeDefined();
-    expect(screen.queryByText("Error: Upstream error")).toBeNull();
+    expect(screen.queryByText(NO_REPLY)).toBeNull();
     expect(sentConversations().at(-1)).toEqual([{ role: "user", content: GREETING }]);
   });
 });
@@ -425,7 +468,7 @@ describe("chatting", () => {
 
     await send("Hello");
 
-    expect(screen.getByText("Error: Upstream error")).toBeDefined();
+    expect(screen.getByText(NO_REPLY)).toBeDefined();
   });
 
   test("shows an error reported in the middle of the stream", async () => {
@@ -438,7 +481,7 @@ describe("chatting", () => {
 
     await send("Hello");
 
-    expect(screen.getByText("Error: Upstream error")).toBeDefined();
+    expect(screen.getByText(NO_REPLY)).toBeDefined();
   });
 
   test("says so when a reply was cut short for want of room", async () => {
@@ -512,11 +555,11 @@ describe("the tokens of the conversation", () => {
   // Any component can read them, wherever it is on the page.
   function Tokens() {
     const { conversationTokens, inputTokens, outputTokens } = useTokenUsage();
-    return <output>{`${conversationTokens} long, ${inputTokens} read, ${outputTokens} written`}</output>;
+    return <output aria-label="Tokens">{`${conversationTokens} long, ${inputTokens} read, ${outputTokens} written`}</output>;
   }
 
   function tokens() {
-    return screen.getByRole("status").textContent;
+    return screen.getByRole("status", { name: "Tokens" }).textContent;
   }
 
   async function renderStartedWithTokens() {
@@ -2017,5 +2060,563 @@ describe("the saved exchanges in two tabs", () => {
     changeInAnotherTab((exchanges) => [deleted, ...exchanges]);
     hearOfAnotherTab();
     expect(savedRow("Two").getAttribute("aria-expanded")).toBe("false");
+  });
+});
+
+describe("accessibility", () => {
+  test("names the message field for what it is for, by whether it is translating", async () => {
+    await renderStarted();
+    expect(screen.getByRole("textbox", { name: "Missatge" })).toBe(input());
+
+    fireEvent.click(translateToggle());
+    expect(screen.getByRole("textbox", { name: "Text per traduir" })).toBe(input());
+  });
+
+  test("finds no faults before a session has started", async () => {
+    render(<Chat initiallyUnlocked />);
+    await settle();
+
+    expect(await accessibilityFaults()).toEqual([]);
+  });
+
+  test("finds no faults in a conversation", async () => {
+    await renderStarted();
+    await send("Good morning");
+
+    expect(await accessibilityFaults()).toEqual([]);
+  });
+
+  test("finds no faults among the saved exchanges, with nothing saved", async () => {
+    await renderStarted();
+    openSaved();
+
+    expect(await accessibilityFaults()).toEqual([]);
+  });
+
+  test("finds no faults among the saved exchanges, with a row open", async () => {
+    await renderSaved("One", "Two");
+    fireEvent.click(savedRow("Two"));
+
+    expect(await accessibilityFaults()).toEqual([]);
+  });
+
+  // A message may be in any language. Marked unknown, it isn't read in a
+  // Catalan voice. Replies are left to the page, which is in Catalan and isn't
+  // rendered here.
+  test("marks a message in the conversation as of unknown language, and not its reply", async () => {
+    await renderStarted();
+    await send("Good morning");
+
+    expect(screen.getByText("Good morning").closest("[lang]")?.getAttribute("lang")).toBe("");
+    expect(screen.getByText("Bon dia!").closest("[lang]")).toBeNull();
+  });
+
+  test("marks a saved message as of unknown language, closed and open, and not its reply", async () => {
+    await renderSaved("Good morning");
+    expect(savedRow("Good morning").closest("[lang]")?.getAttribute("lang")).toBe("");
+
+    fireEvent.click(savedRow("Good morning"));
+    expect(savedRow("Good morning").closest("[lang]")?.getAttribute("lang")).toBe("");
+    expect(screen.getByText("Resposta a Good morning").closest("[lang]")).toBeNull();
+  });
+});
+
+describe("the offer from the keyboard", () => {
+  test("opens and closes from a button beside the reply, which says whether it is open", async () => {
+    await renderStarted();
+    expect(offerIsOpen("Hola!")).toBe(false);
+
+    fireEvent.click(optionsButton("Hola!"));
+    expect(offerIsOpen("Hola!")).toBe(true);
+    const offer = document.getElementById(optionsButton("Hola!").getAttribute("aria-controls")!)!;
+    expect(within(offer).getByRole("button", { name: LISTEN_BUTTON })).toBeTruthy();
+
+    fireEvent.click(optionsButton("Hola!"));
+    expect(offerIsOpen("Hola!")).toBe(false);
+    expect(screen.queryByRole("button", { name: LISTEN_BUTTON })).toBeNull();
+  });
+
+  test("leaves focus on its button, with the offer next in the tab order", async () => {
+    await renderStarted();
+    optionsButton("Hola!").focus();
+
+    fireEvent.click(optionsButton("Hola!"));
+
+    expect(document.activeElement).toBe(optionsButton("Hola!"));
+    const position = optionsButton("Hola!").compareDocumentPosition(
+      screen.getByRole("button", { name: LISTEN_BUTTON }),
+    );
+    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+  });
+
+  test("says when it is opened by tapping the reply", async () => {
+    await renderStarted();
+
+    tap("Hola!");
+
+    expect(offerIsOpen("Hola!")).toBe(true);
+  });
+
+  test("closes on Escape from inside the offer, and returns focus to its button", async () => {
+    await renderStarted();
+    fireEvent.click(optionsButton("Hola!"));
+    const listen = screen.getByRole("button", { name: LISTEN_BUTTON });
+    listen.focus();
+
+    pressEscape(listen);
+
+    expect(offerIsOpen("Hola!")).toBe(false);
+    expect(document.activeElement).toBe(optionsButton("Hola!"));
+  });
+
+  test("closes on Escape from its button", async () => {
+    await renderStarted();
+    optionsButton("Hola!").focus();
+    fireEvent.click(optionsButton("Hola!"));
+
+    pressEscape(optionsButton("Hola!"));
+
+    expect(offerIsOpen("Hola!")).toBe(false);
+    expect(document.activeElement).toBe(optionsButton("Hola!"));
+  });
+
+  test("closes when focus moves away from the offer and its button", async () => {
+    await renderStarted();
+    fireEvent.click(optionsButton("Hola!"));
+    screen.getByRole("button", { name: LISTEN_BUTTON }).focus();
+
+    act(() => input().focus());
+
+    expect(offerIsOpen("Hola!")).toBe(false);
+  });
+
+  test("stays open while focus moves between its button and the offer", async () => {
+    await renderStarted();
+    optionsButton("Hola!").focus();
+    fireEvent.click(optionsButton("Hola!"));
+
+    act(() => screen.getByRole("button", { name: LISTEN_BUTTON }).focus());
+    act(() => optionsButton("Hola!").focus());
+
+    expect(offerIsOpen("Hola!")).toBe(true);
+  });
+
+  test("moves to another reply whose button is pressed", async () => {
+    await renderStarted();
+    await send("Hello");
+    fireEvent.click(optionsButton("Hola!"));
+
+    fireEvent.click(optionsButton("Bon dia!"));
+
+    expect(offerIsOpen("Hola!")).toBe(false);
+    expect(offerIsOpen("Bon dia!")).toBe(true);
+  });
+
+  test("is pressed without the press closing the offer as a press elsewhere would", async () => {
+    await renderStarted();
+    fireEvent.click(optionsButton("Hola!"));
+
+    fireEvent.pointerDown(optionsButton("Hola!"));
+    fireEvent.click(optionsButton("Hola!"));
+
+    // One press, one toggle: closed, not closed and opened again.
+    expect(offerIsOpen("Hola!")).toBe(false);
+  });
+
+  test("is not there beside a reply that has nothing to offer", async () => {
+    health = new Response("Unavailable", { status: 503 });
+    await renderStarted();
+    await settle();
+
+    const row = screen.getByText("Hola!").closest("[data-reply]") as HTMLElement;
+    expect(within(row).queryByRole("button", { name: OPTIONS_BUTTON })).toBeNull();
+  });
+
+  test("stays beside a reply whose offer is open, even once the reply is speaking", async () => {
+    await renderStarted();
+    fireEvent.click(optionsButton("Hola!"));
+
+    await clickListen();
+
+    expect(offerIsOpen("Hola!")).toBe(true);
+  });
+
+  // Closed, the greeting being spoken has nothing to offer but its mute
+  // button, so the button beside it goes.
+  test("closes on Escape onto the mute button when it then has nothing to offer", async () => {
+    await renderStarted();
+    fireEvent.click(optionsButton("Hola!"));
+    await clickListen();
+
+    pressEscape(replyMute()!);
+
+    const row = screen.getByText("Hola!").closest("[data-reply]") as HTMLElement;
+    expect(within(row).queryByRole("button", { name: OPTIONS_BUTTON })).toBeNull();
+    expect(document.activeElement).toBe(replyMute());
+  });
+
+  test("can't be pressed while a reply is being written", async () => {
+    await renderStarted();
+    coldStart();
+    await send("Hello");
+
+    expect(optionsButton("Hola!").disabled).toBe(true);
+  });
+
+  test("finds no accessibility faults with the offer open", async () => {
+    await renderStarted();
+    await send("Hello");
+    fireEvent.click(optionsButton("Bon dia!"));
+
+    expect(await accessibilityFaults()).toEqual([]);
+  });
+});
+
+describe("what the chat says to a screen reader", () => {
+  test("keeps the conversation as a log of messages and replies", async () => {
+    await renderStarted();
+    await send("Hello");
+
+    const log = screen.getByRole("log");
+    expect(within(log).getByText("Hello")).toBeTruthy();
+    expect(within(log).getByText("Bon dia!")).toBeTruthy();
+  });
+
+  test("marks the conversation busy while a reply is written, and not once it ends", async () => {
+    await renderStarted();
+    expect(conversationIsBusy()).toBe(false);
+
+    const arrive = coldStart();
+    await send("Hello");
+    expect(conversationIsBusy()).toBe(true);
+
+    await arrive(reply("Bon dia!"));
+    expect(conversationIsBusy()).toBe(false);
+  });
+
+  test("marks the conversation busy while the greeting is written", async () => {
+    const arrive = coldStart();
+    render(<Chat initiallyUnlocked />);
+    await clickStart();
+    expect(conversationIsBusy()).toBe(true);
+
+    await arrive(reply("Hola!"));
+    expect(conversationIsBusy()).toBe(false);
+  });
+
+  test("doesn't leave the conversation busy when a reply fails", async () => {
+    await renderStarted();
+    answer = failure("Bad gateway");
+
+    await send("Hello");
+
+    expect(conversationIsBusy()).toBe(false);
+  });
+
+  test("doesn't leave the conversation busy after a visit to the saved exchanges", async () => {
+    await renderStarted();
+    await send("Hello");
+    openSaved();
+    backToChat();
+
+    expect(conversationIsBusy()).toBe(false);
+  });
+
+  test("announces that the model is waking", async () => {
+    coldStart();
+    render(<Chat initiallyUnlocked />);
+
+    await clickStart();
+
+    expect(isAnnouncedAsStatus(WAKE_MESSAGE)).toBe(true);
+  });
+
+  test("announces that the model is thinking", async () => {
+    await renderStarted();
+    coldStart();
+
+    await send("Hello");
+
+    expect(isAnnouncedAsStatus("Pensant…")).toBe(true);
+  });
+
+  test("announces that a reply was cut short", async () => {
+    await renderStarted();
+    answer = cutShort("Hi havia una vegada un");
+
+    await send("Explica'm un conte");
+
+    expect(isAnnouncedAsStatus(CUT_SHORT)).toBe(true);
+  });
+});
+
+describe("a reply that can't be had", () => {
+  function retry() {
+    return screen.getByRole("button", { name: RETRY_BUTTON });
+  }
+
+  async function pressRetry() {
+    await act(async () => {
+      fireEvent.click(retry());
+    });
+    await settle();
+  }
+
+  test("says in Catalan that the network couldn't be reached", async () => {
+    await renderStarted();
+    answer = Promise.reject(new TypeError("Failed to fetch"));
+
+    await send("Hello");
+
+    expect(screen.getByText(NO_CONNECTION)).toBeTruthy();
+    expect(screen.queryByText(/Failed to fetch/)).toBeNull();
+  });
+
+  test("says in Catalan that the model couldn't reply, never what the server said", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    await renderStarted();
+    answer = failure("Upstream error");
+
+    await send("Hello");
+
+    expect(screen.getByText(NO_REPLY)).toBeTruthy();
+    expect(screen.queryByText(/Upstream error/)).toBeNull();
+  });
+
+  test("still logs what went wrong", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    await renderStarted();
+    answer = failure("Upstream error");
+
+    await send("Hello");
+
+    expect(log.mock.calls.flat().map(String).join(" ")).toContain("Upstream error");
+  });
+
+  test("says it in a region that is announced at once", async () => {
+    await renderStarted();
+    answer = failure("Upstream error");
+
+    await send("Hello");
+
+    const alert = screen.getByRole("alert");
+    expect(within(alert).getByText(NO_REPLY)).toBeTruthy();
+    expect(within(alert).getByRole("button", { name: RETRY_BUTTON })).toBeTruthy();
+  });
+
+  test("asks again for the reply to the last message, without repeating it", async () => {
+    await renderStarted();
+    answer = failure("Upstream error");
+    await send("Hello");
+
+    answer = reply("Bon dia!");
+    await pressRetry();
+
+    expect(screen.getByText("Bon dia!")).toBeTruthy();
+    expect(screen.queryByText(NO_REPLY)).toBeNull();
+    expect(screen.getAllByText("Hello")).toHaveLength(1);
+    expect(sentConversations().at(-1)!.map(({ content }: { content: string }) => content)).toEqual([
+      GREETING,
+      "Hola!",
+      "Hello",
+    ]);
+  });
+
+  test("asks again for a reply that failed partway, leaving none of the failed one", async () => {
+    await renderStarted();
+    answer = createUIMessageStreamResponse({
+      stream: createUIMessageStream({
+        execute({ writer }) {
+          writer.write({ type: "start" });
+          writer.write({ type: "text-start", id: "t" });
+          writer.write({ type: "text-delta", id: "t", delta: "Bon d" });
+          writer.write({ type: "error", errorText: "Upstream error" });
+        },
+      }),
+    });
+    await send("Hello");
+
+    answer = reply("Bon dia!");
+    await pressRetry();
+
+    expect(screen.getByText("Bon dia!")).toBeTruthy();
+    expect(screen.queryByText("Bon d")).toBeNull();
+  });
+
+  test("puts the keyboard in the message field once it asks again", async () => {
+    await renderStarted();
+    answer = failure("Upstream error");
+    await send("Hello");
+    retry().focus();
+
+    await pressRetry();
+
+    expect(document.activeElement).toBe(input());
+  });
+
+  test("asks again for a translation as a translation", async () => {
+    await renderStarted();
+    fireEvent.click(translateToggle());
+    answer = failure("Upstream error");
+    await send("Good morning");
+    fireEvent.click(translateToggle());
+
+    answer = reply("Bon dia");
+    await pressRetry();
+
+    expect(sentTranslateFlags().at(-1)).toBe(true);
+  });
+
+  test("offers no retry when the greeting fails, which has its own way to start again", async () => {
+    answer = failure("Upstream error");
+    render(<Chat initiallyUnlocked />);
+
+    await clickStart();
+
+    expect(screen.getByText(NO_REPLY)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: RETRY_BUTTON })).toBeNull();
+    expect(screen.getByRole("button", { name: START_BUTTON })).toBeTruthy();
+  });
+
+  test("finds no accessibility faults with an error shown", async () => {
+    await renderStarted();
+    answer = failure("Upstream error");
+    await send("Hello");
+
+    expect(await accessibilityFaults()).toEqual([]);
+  });
+});
+
+describe("undoing a deletion", () => {
+  function deleteSaved(message: string) {
+    fireEvent.click(savedRow(message));
+    fireEvent.click(savedRowButton(message, DELETE_BUTTON));
+  }
+
+  function undo() {
+    fireEvent.click(screen.getByRole("button", { name: UNDO_BUTTON }));
+  }
+
+  test("says the saved exchange was deleted, in a region that is announced, with a way to undo it", async () => {
+    await renderSaved("One", "Two");
+
+    deleteSaved("One");
+
+    const notice = screen.getAllByRole("status").find((status) => status.textContent?.includes(DELETED))!;
+    expect(within(notice).getByRole("button", { name: UNDO_BUTTON })).toBeTruthy();
+  });
+
+  test("still moves the keyboard to the row that takes the deleted one's place", async () => {
+    await renderSaved("One", "Two", "Three");
+
+    deleteSaved("Two");
+
+    expect(document.activeElement).toBe(savedRow("Three"));
+  });
+
+  test("puts the saved exchange back where it was, and the notice goes", async () => {
+    await renderSaved("One", "Two", "Three");
+    deleteSaved("Two");
+
+    undo();
+
+    expect(savedMessages()).toEqual(["One", "Two", "Three"]);
+    expect(screen.queryByText(DELETED)).toBeNull();
+    expect(document.activeElement).toBe(savedRow("Two"));
+  });
+
+  test("puts it back at the end when the list has since become shorter than its place", async () => {
+    await renderSaved("One", "Two", "Three");
+    deleteSaved("Three");
+    changeInAnotherTab((exchanges) => exchanges.filter((one) => one.message !== "One"));
+    hearOfAnotherTab();
+
+    undo();
+
+    expect(savedMessages()).toEqual(["Two", "Three"]);
+  });
+
+  test("survives a later session once undone", async () => {
+    await renderSaved("One", "Two");
+    deleteSaved("One");
+    undo();
+
+    cleanup();
+    render(<Chat initiallyUnlocked />);
+    openSaved();
+
+    expect(savedMessages()).toEqual(["One", "Two"]);
+  });
+
+  test("lets only the newest deletion be undone", async () => {
+    await renderSaved("One", "Two", "Three");
+    deleteSaved("One");
+    deleteSaved("Three");
+
+    expect(screen.getAllByRole("button", { name: UNDO_BUTTON })).toHaveLength(1);
+    undo();
+
+    expect(savedMessages()).toEqual(["Two", "Three"]);
+  });
+
+  test("is no longer offered once the list is left", async () => {
+    await renderSaved("One", "Two");
+    deleteSaved("One");
+
+    backToChat();
+    openSaved();
+
+    expect(screen.queryByRole("button", { name: UNDO_BUTTON })).toBeNull();
+    expect(screen.queryByText(DELETED)).toBeNull();
+  });
+
+  test("is offered even when the last saved exchange was deleted", async () => {
+    await renderSaved("One");
+
+    deleteSaved("One");
+    expect(screen.getByText(NOTHING_SAVED)).toBeTruthy();
+    undo();
+
+    expect(savedMessages()).toEqual(["One"]);
+  });
+
+  test("changes nothing when the exchange has been saved again meanwhile", async () => {
+    await renderSaved("One", "Two");
+    deleteSaved("One");
+    changeInAnotherTab((exchanges) => [...exchanges, { message: "One", reply: "Resposta a One" }]);
+    hearOfAnotherTab();
+
+    undo();
+
+    expect(savedMessages()).toEqual(["Two", "One"]);
+  });
+
+  test("still puts the keyboard on the row at its place when it was saved again meanwhile", async () => {
+    await renderSaved("One", "Two");
+    deleteSaved("One");
+    changeInAnotherTab((exchanges) => [{ message: "One", reply: "Resposta a One" }, ...exchanges]);
+    hearOfAnotherTab();
+
+    undo();
+
+    expect(document.activeElement).toBe(savedRow("One"));
+  });
+
+  test("says so when the saved exchange can't be put back", async () => {
+    await renderSaved("One", "Two");
+    deleteSaved("One");
+    refuseWrites();
+
+    undo();
+
+    expect(screen.getByText(RESTORE_FAILURE)).toBeTruthy();
+    expect(savedMessages()).toEqual(["Two"]);
+  });
+
+  test("finds no accessibility faults with the notice shown", async () => {
+    await renderSaved("One", "Two");
+    deleteSaved("One");
+
+    expect(await accessibilityFaults()).toEqual([]);
   });
 });

@@ -6,15 +6,15 @@ See `docs/specs/accessibility-aa.md`, section "Errors". Terms are defined in `CO
 
 **Blocked by:** 01 — Automated accessibility checks, names and language; 02 — Legible in both themes, and big enough to hit.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A failure to reach the network shows `No s'ha pogut connectar. Comprova la connexió i torna-ho a provar.`
-- [ ] A failure or timeout from the server or the **model host**, and any other failure, shows `La IA no ha pogut respondre. Torna-ho a provar.`
-- [ ] The raw error text is never shown. It is still logged to the console.
-- [ ] A `Torna-ho a provar` button follows the message. Pressing it clears the error and asks again for the reply to the last message, which is not duplicated in the **conversation**.
-- [ ] The retry works for a **translation** as for an ordinary message, keeping the message's mode.
-- [ ] There is no retry button when there is no message to retry, such as when the greeting at the start of a **session** fails, which keeps its existing way to start again.
-- [ ] The message and its button are in a `role="alert"` region, styled with the error colour token from ticket 02, and the button is at least 24 by 24 CSS pixels.
-- [ ] The axe checks gain an error state, and pass.
-- [ ] Tests fake each failure, assert the message shown, and assert that the retry sends the last message again.
-- [ ] `npm test` and `npm run lint` pass.
+- [x] A failure to reach the network shows `No s'ha pogut connectar. Comprova la connexió i torna-ho a provar.`
+- [x] A failure or timeout from the server or the **model host**, and any other failure, shows `La IA no ha pogut respondre. Torna-ho a provar.`
+- [x] The raw error text is never shown. It is still logged to the console.
+- [x] A `Torna-ho a provar` button follows the message. Pressing it clears the error and asks again for the reply to the last message, which is not duplicated in the **conversation**.
+- [x] The retry works for a **translation** as for an ordinary message, keeping the message's mode.
+- [x] There is no retry button when there is no message to retry, such as when the greeting at the start of a **session** fails, which keeps its existing way to start again.
+- [x] The message and its button are in a `role="alert"` region, styled with the error colour token from ticket 02, and the button is at least 24 by 24 CSS pixels.
+- [x] The axe checks gain an error state, and pass.
+- [x] Tests fake each failure, assert the message shown, and assert that the retry sends the last message again.
+- [x] `npm test` and `npm run lint` pass.

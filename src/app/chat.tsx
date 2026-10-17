@@ -2,7 +2,7 @@
 
 import { useChat } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import {
   type Exchange,
   isSameExchange,
@@ -82,10 +82,30 @@ async function isSpeechHealthy(): Promise<boolean> {
 const BOOKMARK_ICON =
   "M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2zm0 15-5-2.18L7 18V5h10v13z";
 const BOOKMARKED_ICON = "M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z";
+const OPTIONS_ICON =
+  "M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z";
 const NEW_CONVERSATION_ICON =
   "M22 4c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14l4 4V4zm-5 7h-4v4h-2v-4H7V9h4V5h2v4h4v2z";
 const SAVED_ICON =
   "M19 18l2 1V3c0-1.1-.9-2-2-2H8.99C7.89 1 7 1.9 7 3h10c1.1 0 2 .9 2 2v13zM15 5H5c-1.1 0-2 .9-2 2v16l7-3 7 3V7c0-1.1-.9-2-2-2z";
+
+// What a failure is called to the user. Fetch rejects with a TypeError only
+// when the network can't be reached; anything else came from the server or
+// the model host, and what it said is meant for the logs.
+function failureMessage(error: Error): string {
+  if (error instanceof TypeError) {
+    return "No s'ha pogut connectar. Comprova la connexió i torna-ho a provar.";
+  }
+  return "La IA no ha pogut respondre. Torna-ho a provar.";
+}
+
+// The ids of the button beside a reply and of the offer it opens.
+function optionsButtonId(prefix: string, replyId: string): string {
+  return `${prefix}-button-${replyId}`;
+}
+function offerElementId(prefix: string, replyId: string): string {
+  return `${prefix}-offer-${replyId}`;
+}
 
 async function unlock(phrase: string): Promise<boolean> {
   const res = await fetch("/api/unlock", {
@@ -105,7 +125,7 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
   // The reply the model stopped writing because its context window was full.
   // The model host cuts such a reply mid-sentence and reports no error.
   const [cutShortId, setCutShortId] = useState<string | null>(null);
-  const { messages, sendMessage, setMessages, status, error, clearError } =
+  const { messages, sendMessage, regenerate, setMessages, status, error, clearError } =
     useChat<ChatMessage>({
       // The session has started once the model has answered the greeting.
       onFinish: ({ message, isAbort, isDisconnect, isError, finishReason }) => {
@@ -117,6 +137,7 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
     });
   const loading = status === "submitted" || status === "streaming";
   const inputRef = useRef<HTMLInputElement>(null);
+  const inputLabelId = useId();
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [offer, setOffer] = useState<Offer | null>(null);
@@ -195,6 +216,10 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
     };
   }, [unlocked]);
 
+  useEffect(() => {
+    if (error) console.error(error);
+  }, [error]);
+
   // The input is disabled until the session starts, so it can't autofocus.
   useEffect(() => {
     if (started) inputRef.current?.focus();
@@ -234,15 +259,45 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
     return { message: messageText(message), reply: messageText(messages[at]) };
   }
 
-  // Tapping a reply opens the offer under it, and tapping it again closes it.
+  // Whether a reply has anything to offer. The reply being spoken already has
+  // its mute button, and one that can't be spoken has no button. Unless it
+  // can be saved, there is nothing more.
+  function hasOffer(id: string): boolean {
+    return (id !== speakingId && speechAvailable) || exchangeOf(id) !== null;
+  }
+
+  // Tapping a reply, or pressing the button beside it, opens the offer under
+  // it, and doing so again closes it.
   function toggleOffer(id: string) {
     if (offer?.id === id) return setOffer(null);
-    // The reply being spoken already has its mute button, and one that can't
-    // be spoken has no button. Unless it can be saved, there is nothing more
-    // to offer.
-    if ((id === speakingId || !speechAvailable) && !exchangeOf(id)) return;
-    setOffer({ id, status: "offered" });
+    if (hasOffer(id)) setOffer({ id, status: "offered" });
   }
+
+  // What the ids of the buttons beside the replies, and of their offers,
+  // begin with.
+  const offerIdPrefix = useId();
+
+  // The reply whose offer was closed from the keyboard, for focus to return
+  // to once it has closed.
+  const closedFromKeyboard = useRef<string>(null);
+
+  // Closes the offer from the keyboard.
+  function closeOffer(id: string) {
+    closedFromKeyboard.current = id;
+    setOffer(null);
+  }
+
+  // Focus returns to the button beside the reply. A reply left with nothing
+  // to offer has no button, only the mute button under it, so it goes there.
+  useLayoutEffect(() => {
+    const id = closedFromKeyboard.current;
+    if (!id) return;
+    closedFromKeyboard.current = null;
+    const button =
+      document.getElementById(optionsButtonId(offerIdPrefix, id)) ??
+      document.getElementById(offerElementId(offerIdPrefix, id))?.querySelector("button");
+    button?.focus();
+  }, [offer, offerIdPrefix]);
 
   // Speaks the text. The id is the source of the sound, and `update` is told
   // how far it has got.
@@ -360,6 +415,7 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
     const isSaved = exchange !== null && saved.some((one) => isSameExchange(one, exchange));
     return (
       <div
+        id={offerElementId(offerIdPrefix, m.id)}
         ref={held ? offerRef : undefined}
         // A mute button left behind by an offer that was dismissed isn't one.
         data-offer={held ? "" : undefined}
@@ -389,7 +445,7 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
           </button>
         )}
         {held?.status === "failed" && <ListenFailure />}
-        {held?.saveFailed && !isSaved && <p className="text-sm text-red-600">No s&apos;ha pogut desar.</p>}
+        {held?.saveFailed && !isSaved && <p className="text-sm text-danger">No s&apos;ha pogut desar.</p>}
       </div>
     );
   }
@@ -407,7 +463,7 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
       ref={containerRef}
       className="fixed inset-x-0 top-0 mx-auto flex h-dvh w-full max-w-2xl flex-col px-4"
     >
-      <header className="flex shrink-0 items-center justify-between border-b border-black/10 py-4 dark:border-white/10">
+      <header className="flex shrink-0 items-center justify-between border-b border-rule py-4">
         <h1 className="text-lg font-semibold">Xat en català</h1>
         <div className="flex items-center gap-3">
           {/* The mute button under the reply being spoken may be out of sight. */}
@@ -415,7 +471,7 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
             <button
               onClick={mute}
               aria-label="Silencia"
-              className="text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white"
+              className="p-0.5 text-muted hover:text-foreground"
             >
               <Icon path={MUTE_ICON} />
             </button>
@@ -435,7 +491,7 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
               disabled={loading}
               aria-label="Nova conversa"
               title="Nova conversa"
-              className="text-black/50 hover:text-black disabled:opacity-40 dark:text-white/50 dark:hover:text-white"
+              className="p-0.5 text-muted hover:text-foreground disabled:opacity-40"
             >
               <Icon path={NEW_CONVERSATION_ICON} />
             </button>
@@ -449,7 +505,7 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
               }}
               aria-label={showingSaved ? undefined : "Desats"}
               title={showingSaved ? undefined : "Desats"}
-              className="text-sm text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white"
+              className="p-0.5 text-sm text-muted hover:text-foreground"
             >
               {showingSaved ? "Torna al xat" : <Icon path={SAVED_ICON} />}
             </button>
@@ -468,20 +524,24 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
       ) : (
         <main ref={mainRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain py-6">
           {!unlocked && (
-            <p className="pt-20 text-center text-xs text-black/50 dark:text-white/50">
+            <p className="pt-20 text-center text-xs text-muted">
               Please enter the secret phrase to start chatting.
             </p>
           )}
           {unlocked && !started && (
             <div className="flex h-3/4 items-center justify-center">
-              {loading ? (
-                <p className="text-center text-xs text-black/50 dark:text-white/50">
-                  La IA s&apos;està despertant. Un moment, si us plau.
-                </p>
-              ) : (
+              {/* There before it says anything, so that what it says is announced. */}
+              <div role="status">
+                {loading && (
+                  <p className="text-center text-xs text-muted">
+                    La IA s&apos;està despertant. Un moment, si us plau.
+                  </p>
+                )}
+              </div>
+              {!loading && (
                 <button
                   onClick={startSession}
-                  className="rounded-full bg-blue-600 px-5 py-2 font-medium text-white"
+                  className="rounded-full bg-accent px-5 py-2 font-medium text-white"
                 >
                   Iniciar la sessió
                 </button>
@@ -489,65 +549,134 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
             </div>
           )}
           {started && visibleMessages.length === 0 && (
-            <p className="pt-20 text-center text-black/40 dark:text-white/40">
+            <p className="pt-20 text-center text-muted">
               Escriu un missatge en qualsevol idioma. Et respondré en català.
             </p>
           )}
-          {visibleMessages.map((m) =>
-            m.role === "user" ? (
-              <div key={m.id} className="flex justify-end">
-                <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-blue-600 px-4 py-2 text-white">
-                  {messageText(m)}
+          {/* Busy while a reply is written, so that a screen reader reads it
+              once it is whole rather than word by word. */}
+          <div role="log" aria-busy={loading} className="space-y-4 empty:m-0">
+            {visibleMessages.map((m) =>
+              m.role === "user" ? (
+                <div key={m.id} className="flex justify-end">
+                  {/* A message may be in any language, so it is marked unknown. */}
+                  <div lang="" className="max-w-[85%] whitespace-pre-wrap wrap-anywhere rounded-2xl bg-accent px-4 py-2 text-white">
+                    {messageText(m)}
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div key={m.id} className="flex flex-col items-start gap-1">
-                {/* Tapping a reply offers to speak it and to save it. */}
+              ) : (
                 <div
-                  data-reply
-                  onClick={(e) => {
-                    // Not for a link, which the tap follows, nor for a drag
-                    // that selected some of the text.
-                    if ((e.target as Element).closest("a")) return;
-                    if (!window.getSelection()?.isCollapsed) return;
-                    // Not while a reply is still being written.
-                    if (!loading) toggleOffer(m.id);
+                  key={m.id}
+                  className="flex flex-col items-start gap-1"
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape" && offer?.id === m.id) closeOffer(m.id);
                   }}
-                  className="markdown max-w-[85%] rounded-2xl bg-black/5 px-4 py-2 dark:bg-white/10"
+                  // Focus moving to something else closes the offer, as a press
+                  // elsewhere does. Focus lost to nothing, as when a pressed
+                  // button is replaced, leaves it open.
+                  onBlur={(e) => {
+                    const to = e.relatedTarget;
+                    if (offer?.id === m.id && to && !e.currentTarget.contains(to)) setOffer(null);
+                  }}
                 >
-                  <Reply text={messageText(m)} />
+                  {/* Tapping a reply offers to speak it and to save it. A press
+                      on the button beside it is a press on the reply too, so
+                      that it doesn't count as a press elsewhere. */}
+                  <div data-reply className="flex max-w-[85%] items-start gap-1">
+                    <div
+                      onClick={(e) => {
+                        // Not for a link, which the tap follows, nor for a drag
+                        // that selected some of the text.
+                        if ((e.target as Element).closest("a")) return;
+                        if (!window.getSelection()?.isCollapsed) return;
+                        // Not while a reply is still being written.
+                        if (!loading) toggleOffer(m.id);
+                      }}
+                      className="markdown min-w-0 rounded-2xl bg-surface px-4 py-2"
+                    >
+                      <Reply text={messageText(m)} />
+                    </div>
+                    {/* The way to the offer for those who can't tap. It stays
+                        while its offer is open, so that Escape has somewhere
+                        to return to. */}
+                    {(hasOffer(m.id) || offer?.id === m.id) && (
+                      <button
+                        type="button"
+                        id={optionsButtonId(offerIdPrefix, m.id)}
+                        onClick={() => toggleOffer(m.id)}
+                        disabled={loading}
+                        aria-label="Opcions de la resposta"
+                        aria-expanded={offer?.id === m.id}
+                        aria-controls={offerElementId(offerIdPrefix, m.id)}
+                        className="shrink-0 p-0.5 text-muted hover:text-foreground disabled:opacity-40"
+                      >
+                        <Icon path={OPTIONS_ICON} />
+                      </button>
+                    )}
+                  </div>
+                  {optionsUnder(m)}
                 </div>
-                {optionsUnder(m)}
+              ),
+            )}
+          </div>
+          {/* Status regions are there before they say anything, so that what
+              they say is announced. Empty, they take no room. */}
+          <div role="status" className="empty:m-0">
+            {started && loading && !replying && (
+              <div className="flex">
+                <div className="rounded-2xl bg-surface px-4 py-2 text-muted">
+                  Pensant…
+                </div>
               </div>
-            ),
-          )}
-          {started && loading && !replying && (
-            <div className="flex">
-              <div className="rounded-2xl bg-black/5 px-4 py-2 text-black/50 dark:bg-white/10 dark:text-white/50">
-                Pensant…
+            )}
+          </div>
+          <div role="alert" className="empty:m-0">
+            {error && (
+              <div className="flex flex-col items-center gap-2">
+                <p className="text-center text-sm text-danger">{failureMessage(error)}</p>
+                {/* The greeting has the start button to try again with. */}
+                {started && (
+                  <button
+                    onClick={() => {
+                      clearError();
+                      regenerate();
+                      // The button goes with the error.
+                      inputRef.current?.focus();
+                    }}
+                    className={OFFER_BUTTON_STYLE}
+                  >
+                    Torna-ho a provar
+                  </button>
+                )}
               </div>
-            </div>
-          )}
-          {error && (
-            <p className="text-center text-sm text-red-600">Error: {error.message}</p>
-          )}
+            )}
+          </div>
           {/* Only while that reply is the newest: a later one came out whole. */}
-          {cutShortId !== null && messages.at(-1)?.id === cutShortId && (
-            <p className="text-center text-sm text-red-600">
-              La resposta s&apos;ha tallat perquè la conversa és massa llarga. Comença&apos;n una de nova.
-            </p>
-          )}
+          <div role="status" className="empty:m-0">
+            {cutShortId !== null && messages.at(-1)?.id === cutShortId && (
+              <p className="text-center text-sm text-danger">
+                La resposta s&apos;ha tallat perquè la conversa és massa llarga. Comença&apos;n una de nova.
+              </p>
+            )}
+          </div>
           <div ref={bottomRef} />
         </main>
       )}
 
       {/* Hidden, not removed, behind the saved exchanges: the input keeps what
-          was typed and isn't focused afresh on return. */}
+          was typed and isn't focused afresh on return. Named by the field's
+          label, so that it is a landmark and the field is found in one. */}
       <form
         onSubmit={handleSubmit}
+        aria-labelledby={inputLabelId}
         hidden={showingSaved}
-        className={`${showingSaved ? "hidden" : "flex"} shrink-0 gap-2 border-t border-black/10 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] dark:border-white/10`}
+        className={`${showingSaved ? "hidden" : "flex"} shrink-0 gap-2 border-t border-rule pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]`}
       >
+        {/* The placeholder and the Envia button say what the field is for to
+            the eye; the label says it to a screen reader. */}
+        <label id={inputLabelId} htmlFor={`${inputLabelId}-field`} className="sr-only">
+          {translating ? "Text per traduir" : "Missatge"}
+        </label>
         <button
           type="button"
           aria-label="Tradueix"
@@ -560,8 +689,8 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
           disabled={!started}
           className={`shrink-0 rounded-full border p-2 disabled:opacity-40 ${
             translating
-              ? "border-blue-600 bg-blue-600 text-white"
-              : "border-black/15 text-black/50 hover:text-black dark:border-white/20 dark:text-white/50 dark:hover:text-white"
+              ? "border-accent bg-accent text-white"
+              : "border-outline text-muted hover:text-foreground"
           }`}
         >
           <svg
@@ -578,18 +707,19 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
           </svg>
         </button>
         <input
+          id={`${inputLabelId}-field`}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder={translating ? "Escriu un text per traduir…" : "Escriu un missatge…"}
           ref={inputRef}
           autoFocus
           disabled={inputDisabled}
-          className="min-w-0 flex-1 rounded-full border border-black/15 bg-transparent px-4 py-2 text-base outline-none focus:border-blue-600 disabled:opacity-40 dark:border-white/20"
+          className="min-w-0 flex-1 rounded-full border border-outline bg-transparent px-4 py-2 text-base outline-none focus:border-accent disabled:opacity-40"
         />
         <button
           type="submit"
           disabled={loading || inputDisabled || !input.trim()}
-          className="rounded-full bg-blue-600 px-5 py-2 font-medium text-white disabled:opacity-40"
+          className="rounded-full bg-accent px-5 py-2 font-medium text-white disabled:opacity-40"
         >
           Envia
         </button>
