@@ -74,9 +74,10 @@ test("both prompts ask for Catalan", () => {
   expect(TRANSLATION_PROMPT).toContain("català");
 });
 
-test("casts the model as a teacher of Catalan, helping the user learn it", () => {
-  expect(SYSTEM_PROMPT).toMatch(/teacher of Catalan/);
-  expect(SYSTEM_PROMPT).toMatch(/help the student (learn|understand)/);
+test("casts the model as a teacher of Catalan, framing each reply to help the user understand it", () => {
+  expect(SYSTEM_PROMPT).toContain("teacher of Catalan");
+  expect(SYSTEM_PROMPT).toContain("help the student learn the language");
+  expect(SYSTEM_PROMPT).toContain("Frame each reply to help the student understand the Catalan in it");
 });
 
 // With a fifth, the vLLM worker that served the model before Cloud Run
