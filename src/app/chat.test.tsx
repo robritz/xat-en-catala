@@ -309,6 +309,15 @@ function isAnnouncedAsStatus(text: string) {
   return screen.getAllByRole("status").some((status) => status.textContent?.includes(text));
 }
 
+// Whether the image is a spinner: one that turns, unless less motion is asked
+// for, and is hidden from a screen reader, which is told in words instead.
+function isSpinner(image: Element | null) {
+  return (
+    image?.getAttribute("aria-hidden") === "true" &&
+    image.classList.contains("motion-safe:animate-spin")
+  );
+}
+
 function pressEscape(element: Element) {
   fireEvent.keyDown(element, { key: "Escape" });
 }
@@ -395,6 +404,18 @@ describe("starting a session", () => {
     expect(screen.queryByText(GREETING)).toBeNull();
     expect(screen.queryByText("Pensant…")).toBeNull();
     expect(input().disabled).toBe(true);
+  });
+
+  test("shows a spinner while waiting, and says why only to a screen reader", async () => {
+    coldStart();
+    render(<Chat initiallyUnlocked />);
+
+    await clickStart();
+
+    expect(isAnnouncedAsStatus(WAKE_MESSAGE)).toBe(true);
+    expect(screen.getByText(WAKE_MESSAGE).classList.contains("sr-only")).toBe(true);
+    expect(isSpinner(screen.getByText(WAKE_MESSAGE).parentElement!.querySelector("svg"))).toBe(true);
+    expect(await accessibilityFaults()).toEqual([]);
   });
 
   test("keeps waiting through a cold start, then shows the greeting and enables chatting", async () => {
@@ -817,7 +838,11 @@ describe("hearing a reply", () => {
 
     await clickListen();
 
-    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Carregant…" }).disabled).toBe(true);
+    const loading = screen.getByRole<HTMLButtonElement>("button", { name: "Carregant…" });
+    expect(loading.disabled).toBe(true);
+    // A spinner in place of the word, which is left to a screen reader.
+    expect(loading.textContent).toBe("");
+    expect(isSpinner(loading.querySelector("svg"))).toBe(true);
     expect(played).toEqual([]);
 
     await act(async () => resolve(new Response("wav")));
@@ -1487,6 +1512,7 @@ describe("hearing a saved reply", () => {
     await clickListen();
 
     expect(savedRowButton("One", "Carregant…").disabled).toBe(true);
+    expect(isSpinner(savedRowButton("One", "Carregant…").querySelector("svg"))).toBe(true);
     expect(played).toEqual([]);
 
     await act(async () => resolve(new Response("wav")));

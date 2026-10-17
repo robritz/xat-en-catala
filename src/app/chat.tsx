@@ -20,6 +20,7 @@ import ListenButton, {
 } from "./listen-button";
 import Icon from "./path-icon";
 import Reply from "./reply";
+import Spinner from "./spinner";
 import SavedExchanges, { useSavedExchanges } from "./saved-exchanges";
 
 // `hidden` marks messages that are sent to the model but never rendered.
@@ -532,10 +533,13 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
             <div className="flex h-3/4 items-center justify-center">
               {/* There before it says anything, so that what it says is announced. */}
               <div role="status">
+                {/* The spinner shows that it is waiting; the words say why
+                    to a screen reader. */}
                 {loading && (
-                  <p className="text-center text-xs text-muted">
-                    La IA s&apos;està despertant. Un moment, si us plau.
-                  </p>
+                  <div className="text-muted">
+                    <Spinner className="size-8" />
+                    <p className="sr-only">La IA s&apos;està despertant. Un moment, si us plau.</p>
+                  </div>
                 )}
               </div>
               {!loading && (
