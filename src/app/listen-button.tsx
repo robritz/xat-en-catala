@@ -1,11 +1,12 @@
 import Icon from "./path-icon";
+import Spinner from "./spinner";
 
 // How far a reply has got with being spoken: it can be asked for, its audio
 // is being prepared, it is being spoken, or it couldn't be.
 export type Sound = "offered" | "loading" | "speaking" | "failed";
 
-export const OFFER_BUTTON_STYLE =
-  "rounded-full border border-outline px-3 py-1 text-sm disabled:opacity-40";
+const OFFER_BUTTON_BASE_STYLE = "rounded-full border border-outline px-3 py-1 text-sm";
+export const OFFER_BUTTON_STYLE = `${OFFER_BUTTON_BASE_STYLE} disabled:opacity-40`;
 
 const SPEAKER_ICON =
   "M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z";
@@ -34,10 +35,18 @@ export default function ListenButton({
       </button>
     );
   }
+  // Unavailable without being disabled, so that focus stays on the button
+  // pressed to hear the reply, which this is until it becomes the mute button.
+  // Nor is it dimmed: the spinner says how far it has got, and must be seen as
+  // well as the icon it took the place of.
   if (sound === "loading") {
     return (
-      <button disabled className={OFFER_BUTTON_STYLE}>
-        Carregant…
+      <button
+        aria-disabled="true"
+        aria-label="Carregant…"
+        className={`${OFFER_BUTTON_BASE_STYLE} cursor-progress`}
+      >
+        <Spinner />
       </button>
     );
   }

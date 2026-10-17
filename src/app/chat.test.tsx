@@ -309,6 +309,11 @@ function isAnnouncedAsStatus(text: string) {
   return screen.getAllByRole("status").some((status) => status.textContent?.includes(text));
 }
 
+// Whether a button is announced as unavailable. It may stay focusable.
+function isUnavailable(button: HTMLElement) {
+  return (button as HTMLButtonElement).disabled || button.getAttribute("aria-disabled") === "true";
+}
+
 function pressEscape(element: Element) {
   fireEvent.keyDown(element, { key: "Escape" });
 }
@@ -395,6 +400,16 @@ describe("starting a session", () => {
     expect(screen.queryByText(GREETING)).toBeNull();
     expect(screen.queryByText("Pensant…")).toBeNull();
     expect(input().disabled).toBe(true);
+  });
+
+  test("announces why it is waiting", async () => {
+    coldStart();
+    render(<Chat initiallyUnlocked />);
+
+    await clickStart();
+
+    expect(isAnnouncedAsStatus(WAKE_MESSAGE)).toBe(true);
+    expect(await accessibilityFaults()).toEqual([]);
   });
 
   test("keeps waiting through a cold start, then shows the greeting and enables chatting", async () => {
@@ -817,7 +832,7 @@ describe("hearing a reply", () => {
 
     await clickListen();
 
-    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Carregant…" }).disabled).toBe(true);
+    expect(isUnavailable(screen.getByRole("button", { name: "Carregant…" }))).toBe(true);
     expect(played).toEqual([]);
 
     await act(async () => resolve(new Response("wav")));
@@ -825,6 +840,28 @@ describe("hearing a reply", () => {
 
     expect(played).toEqual(["blob:speech"]);
     expect(screen.queryByRole("button", { name: "Carregant…" })).toBeNull();
+  });
+
+  test("keeps focus on the button pressed to hear a reply, from loading to mute", async () => {
+    await renderStarted();
+    let resolve!: (res: Response) => void;
+    speech = new Promise((r) => (resolve = r));
+    tap("Hola!");
+    screen.getByRole("button", { name: LISTEN_BUTTON }).focus();
+
+    await clickListen();
+
+    // A browser drops focus from a button that is disabled. jsdom doesn't, but
+    // won't give it focus afresh, as Tab would from the button beside the reply.
+    const loading = screen.getByRole("button", { name: "Carregant…" });
+    screen.getByRole("button", { name: OPTIONS_BUTTON }).focus();
+    loading.focus();
+    expect(document.activeElement).toBe(loading);
+
+    await act(async () => resolve(new Response("wav")));
+    await settle();
+
+    expect(document.activeElement).toBe(replyMute());
   });
 
   test("offers to mute the reply once it is being spoken", async () => {
@@ -1486,7 +1523,7 @@ describe("hearing a saved reply", () => {
 
     await clickListen();
 
-    expect(savedRowButton("One", "Carregant…").disabled).toBe(true);
+    expect(isUnavailable(savedRowButton("One", "Carregant…"))).toBe(true);
     expect(played).toEqual([]);
 
     await act(async () => resolve(new Response("wav")));

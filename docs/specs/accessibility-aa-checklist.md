@@ -42,10 +42,14 @@ In Safari, turn on "Press Tab to highlight each item on a webpage" first.
 
 Measure with a contrast checker (for example the colour picker in Chrome's DevTools) in light mode and again in dark mode.
 
-21. The empty-conversation hint, the waking line, `Pensant…` on its bubble, the empty saved-exchanges hint, `S'ha suprimit.`, and every error. **Expect:** 4.5:1 or more.
-22. The message field's border against the page. **Expect:** 3:1 or more.
+21. The empty-conversation hint, `Pensant…` on its bubble, the empty saved-exchanges hint, `S'ha suprimit.`, and every error. **Expect:** 4.5:1 or more.
+22. The message field's border against the page, and the turning arc of the spinners shown while a session starts and while a reply's speech loads. **Expect:** 3:1 or more.
 23. White text on the blue `Envia`, `Iniciar la sessió` and message bubbles, and links in replies. **Expect:** 4.5:1 or more.
 
 ## Target size
 
 24. Measure the header buttons, `Opcions de la resposta`, and the buttons in the offer and the saved-exchanges list in DevTools. **Expect:** each is 24 by 24 CSS pixels or more.
+
+## Focus while a reply's speech loads
+
+25. Keyboard only, in Safari and Chrome: open a reply's offer, Tab to `Escolta` and press Enter. **Expect:** focus stays on the button while its spinner turns, and is still on it once it becomes `Silencia`.
