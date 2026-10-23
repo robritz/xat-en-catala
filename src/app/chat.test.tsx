@@ -28,32 +28,33 @@ const SAVE_FAILURE = "No s'ha pogut desar.";
 // Each named in Catalan and in English.
 const NATIVE_LANGUAGE_QUESTION = "Quina llengua llegeixes millor? Which language do you read best?";
 // Once a native language is chosen, the level question is asked in it.
-const ASKED_IN: Record<string, { question: string; start: string; back: string; a1: string }> = {
+const ASKED_IN = {
   English: {
     question: "What is your level of Catalan?",
     start: "Start",
     back: "Back",
-    a1: "A1 I know a few words and simple phrases.",
+    a1: "A1 I can use a few words and simple phrases.",
   },
   Español: {
     question: "¿Cuál es tu nivel de catalán?",
     start: "Empezar",
     back: "Atrás",
-    a1: "A1 Conozco algunas palabras y frases sencillas.",
+    a1: "A1 Sé usar algunas palabras y frases sencillas.",
   },
   Deutsch: {
     question: "Wie gut ist dein Katalanisch?",
     start: "Starten",
     back: "Zurück",
-    a1: "A1 Ich kenne ein paar Wörter und einfache Sätze.",
+    a1: "A1 Ich kann ein paar Wörter und einfache Sätze verwenden.",
   },
   Galego: {
     question: "Cal é o teu nivel de catalán?",
     start: "Comezar",
     back: "Atrás",
-    a1: "A1 Coñezo algunhas palabras e frases sinxelas.",
+    a1: "A1 Sei usar algunhas palabras e frases sinxelas.",
   },
-};
+} satisfies Record<string, { question: string; start: string; back: string; a1: string }>;
+type AskedIn = keyof typeof ASKED_IN;
 const NOTHING_SAVED =
   "Encara no has desat res. Toca una resposta i després el marcador per desar-la.";
 
@@ -282,7 +283,7 @@ function levelRadio(level: string) {
 }
 
 // Answers onboarding's two questions and finishes it.
-async function onboard(nativeLanguage: string, level: string) {
+async function onboard(nativeLanguage: AskedIn, level: string) {
   fireEvent.click(screen.getByRole("button", { name: nativeLanguage }));
   fireEvent.click(levelRadio(level));
   await act(async () => {
@@ -518,7 +519,7 @@ describe("onboarding", () => {
     expect(await accessibilityFaults()).toEqual([]);
   });
 
-  test.each(["English", "Español", "Deutsch"])(
+  test.each<AskedIn>(["English", "Español", "Deutsch"])(
     "asks the level question, describes each level and labels its controls in %s",
     (language) => {
       render(<Chat initiallyUnlocked />);
