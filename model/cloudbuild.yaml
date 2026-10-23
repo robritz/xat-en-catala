@@ -1,6 +1,6 @@
 # The build pipeline of the model host. A merge to main that changes model/
 # runs it, through the trigger infra/platform creates; it can also be run by
-# hand, as the README shows. The source is the whole repository.
+# hand, as docs/guide.md shows. The source is the whole repository.
 #
 # It builds the service image and pushes it, and does nothing else: deploying
 # it is the deploy pipeline's work, infra/service/cloudbuild.yaml, which the

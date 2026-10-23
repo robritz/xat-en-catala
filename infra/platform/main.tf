@@ -1,6 +1,6 @@
 # What the model host is assembled from: the APIs, the Docker repository, the
 # bucket the weights are mirrored into, the bucket the Terraform state is kept
-# in, and the API key's secret. Applied by hand; see the README.
+# in, and the API key's secret. Applied by hand; see docs/guide.md.
 
 resource "google_project_service" "apis" {
   for_each = toset([
@@ -54,7 +54,7 @@ resource "google_storage_bucket" "state" {
   depends_on = [google_project_service.apis]
 }
 
-# The secret only. Its value, the key, is added with gcloud as the README
+# The secret only. Its value, the key, is added with gcloud as docs/guide.md
 # shows, so that it is never held in Terraform's state.
 resource "google_secret_manager_secret" "api_key" {
   secret_id = "model-host-api-key"
