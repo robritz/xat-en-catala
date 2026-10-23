@@ -27,8 +27,33 @@ const OPTIONS_BUTTON = "Opcions de la resposta";
 const SAVE_FAILURE = "No s'ha pogut desar.";
 // Each named in Catalan and in English.
 const NATIVE_LANGUAGE_QUESTION = "Quina llengua llegeixes millor? Which language do you read best?";
-const LEVEL_QUESTION = "Quin és el teu nivell de català? What is your level of Catalan?";
-const FINISH_BUTTON = "Comença Start";
+// Once a native language is chosen, the level question is asked in it.
+const ASKED_IN: Record<string, { question: string; start: string; back: string; a1: string }> = {
+  English: {
+    question: "What is your level of Catalan?",
+    start: "Start",
+    back: "Back",
+    a1: "A1 I know a few words and simple phrases.",
+  },
+  Español: {
+    question: "¿Cuál es tu nivel de catalán?",
+    start: "Empezar",
+    back: "Atrás",
+    a1: "A1 Conozco algunas palabras y frases sencillas.",
+  },
+  Deutsch: {
+    question: "Wie gut ist dein Katalanisch?",
+    start: "Starten",
+    back: "Zurück",
+    a1: "A1 Ich kenne ein paar Wörter und einfache Sätze.",
+  },
+  Galego: {
+    question: "Cal é o teu nivel de catalán?",
+    start: "Comezar",
+    back: "Atrás",
+    a1: "A1 Coñezo algunhas palabras e frases sinxelas.",
+  },
+};
 const NOTHING_SAVED =
   "Encara no has desat res. Toca una resposta i després el marcador per desar-la.";
 
@@ -251,12 +276,17 @@ function sentProfiles() {
     .map(([, init]) => JSON.parse(init!.body as string).profile);
 }
 
+// A level's choice, which is named by the level and its description.
+function levelRadio(level: string) {
+  return screen.getByRole("radio", { name: new RegExp(`^${level} `) });
+}
+
 // Answers onboarding's two questions and finishes it.
 async function onboard(nativeLanguage: string, level: string) {
   fireEvent.click(screen.getByRole("button", { name: nativeLanguage }));
-  fireEvent.click(screen.getByRole("radio", { name: level }));
+  fireEvent.click(levelRadio(level));
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: FINISH_BUTTON }));
+    fireEvent.click(screen.getByRole("button", { name: ASKED_IN[nativeLanguage].start }));
   });
   await settle();
 }
@@ -435,16 +465,16 @@ describe("onboarding", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Galego" }));
 
-    const question = screen.getByRole("radiogroup", { name: LEVEL_QUESTION });
+    const question = screen.getByRole("radiogroup", { name: ASKED_IN.Galego.question });
     expect(
       within(question)
         .getAllByRole("radio")
         .map((radio) => (radio as HTMLInputElement).value),
     ).toEqual(["A1", "A2", "B1", "B2", "C1", "C2"]);
     expect(screen.queryByRole("group", { name: NATIVE_LANGUAGE_QUESTION })).toBeNull();
-    const finish = screen.getByRole<HTMLButtonElement>("button", { name: FINISH_BUTTON });
+    const finish = screen.getByRole<HTMLButtonElement>("button", { name: ASKED_IN.Galego.start });
     expect(finish.disabled).toBe(true);
-    fireEvent.click(screen.getByRole("radio", { name: "A2" }));
+    fireEvent.click(levelRadio("A2"));
     expect(finish.disabled).toBe(false);
   });
 
@@ -462,7 +492,7 @@ describe("onboarding", () => {
     expect(sentConversations()).toEqual([[{ role: "user", content: GREETING }]]);
     expect(sentProfiles()).toEqual([{ nativeLanguage: "de", level: "A1" }]);
     expect(screen.getByText(WAKE_MESSAGE)).toBeDefined();
-    expect(screen.queryByRole("radiogroup", { name: LEVEL_QUESTION })).toBeNull();
+    expect(screen.queryByRole("radiogroup")).toBeNull();
   });
 
   test("sends the profile chosen with every message after the greeting", async () => {
@@ -486,6 +516,59 @@ describe("onboarding", () => {
 
     expect(document.activeElement).toBe(screen.getAllByRole("radio")[0]);
     expect(await accessibilityFaults()).toEqual([]);
+  });
+
+  test.each(["English", "Español", "Deutsch"])(
+    "asks the level question, describes each level and labels its controls in %s",
+    (language) => {
+      render(<Chat initiallyUnlocked />);
+
+      fireEvent.click(screen.getByRole("button", { name: language }));
+
+      const asked = ASKED_IN[language];
+      const question = screen.getByRole("radiogroup", { name: asked.question });
+      expect(within(question).getByRole("radio", { name: asked.a1 })).toBeDefined();
+      expect(screen.getByRole("button", { name: asked.start })).toBeDefined();
+      expect(screen.getByRole("button", { name: asked.back })).toBeDefined();
+      // Nothing of the step is left in Catalan.
+      expect(screen.queryByText("Quin és el teu nivell de català?")).toBeNull();
+      expect(screen.queryByText(/Comença/)).toBeNull();
+    },
+  );
+
+  test("marks the level step, and each native language, with its language", () => {
+    render(<Chat initiallyUnlocked />);
+    const options = within(screen.getByRole("group", { name: NATIVE_LANGUAGE_QUESTION })).getAllByRole(
+      "button",
+    );
+    expect(options.map((option) => option.getAttribute("lang"))).toEqual([
+      "en",
+      "es",
+      "eu",
+      "gl",
+      "fr",
+      "de",
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Français" }));
+
+    expect(screen.getByRole("radiogroup").closest("[lang]")!.getAttribute("lang")).toBe("fr");
+  });
+
+  test("goes back to the native language question with the earlier choice still chosen", () => {
+    render(<Chat initiallyUnlocked />);
+    fireEvent.click(screen.getByRole("button", { name: "Deutsch" }));
+
+    fireEvent.click(screen.getByRole("button", { name: ASKED_IN.Deutsch.back }));
+
+    expect(screen.queryByRole("radiogroup")).toBeNull();
+    const chosen = screen.getByRole("button", { name: "Deutsch" });
+    expect(chosen.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "English" }).getAttribute("aria-pressed")).toBe("false");
+    expect(document.activeElement).toBe(chosen);
+
+    fireEvent.click(screen.getByRole("button", { name: "Español" }));
+    expect(screen.getByRole("radiogroup", { name: ASKED_IN.Español.question })).toBeDefined();
   });
 
   test("lets the saved exchanges be read before it is finished", () => {

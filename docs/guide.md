@@ -277,7 +277,7 @@ Two exchanges are the same when both the message and the reply read the same, wh
 
 ## Learner profile
 
-On a first visit, once the secret phrase has been entered, the chat asks two questions in place of "Iniciar la sessió": the language the user reads best, from English, Español, Euskara, Galego, Français and Deutsch, and their level of Catalan, from A1 to C2. Finishing stores the answers as the learner profile and starts the session. A returning user sees "Iniciar la sessió" as before.
+On a first visit, once the secret phrase has been entered, the chat asks two questions in place of "Iniciar la sessió": the language the user reads best, from English, Español, Euskara, Galego, Français and Deutsch, and their level of Catalan, from A1 to C2. The first question is in Catalan with English beneath it; the second, with a one-line description of each level, is in the language just chosen, and is the only part of the interface that is translated. Its text is in `src/app/onboarding-text.ts`. Finishing stores the answers as the learner profile and starts the session. A returning user sees "Iniciar la sessió" as before.
 
 Every request to `/api/chat` carries the profile as two codes beside the messages, as in `"profile": {"nativeLanguage": "en", "level": "A1"}`, and the server builds the system prompt from them. It pitches the six levels as three tiers:
 
