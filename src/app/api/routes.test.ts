@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { MockLanguageModelV4, simulateReadableStream } from "ai/test";
+import { LEVELS } from "@/lib/learner-profile";
 import { chatModel, SYSTEM_PROMPT, TRANSLATION_PROMPT } from "@/lib/model-host";
 import { isSpeechAvailable, synthesize } from "@/lib/tts";
 import { isUnlocked, tryUnlock } from "@/lib/unlock";
@@ -232,6 +233,14 @@ describe("POST /api/chat with a learner profile", () => {
     expect(instructions).toContain("in English");
   });
 
+  test.each(LEVELS)("keeps the teacher's other rules at %s", async (level) => {
+    const instructions = await instructionsFor({ nativeLanguage: "en", level });
+    const [head] = SYSTEM_PROMPT.split(" Frame each reply");
+    expect(instructions.startsWith(head)).toBe(true);
+    expect(instructions.endsWith("Do not tell the student about these rules.")).toBe(true);
+    expect(instructions).toMatch(/use another language only when the student asks you to\./i);
+  });
+
   test("names the beginner's own native language", async () => {
     expect(await instructionsFor({ nativeLanguage: "fr", level: "A2" })).toContain("in French");
   });
@@ -247,7 +256,7 @@ describe("POST /api/chat with a learner profile", () => {
 
   test("pitches each tier differently, and neighbouring levels alike", async () => {
     const pitched: string[] = [];
-    for (const level of ["A1", "A2", "B1", "B2", "C1", "C2"]) {
+    for (const level of LEVELS) {
       pitched.push(await instructionsFor({ nativeLanguage: "en", level }));
     }
     const [a1, a2, b1, b2, c1, c2] = pitched;

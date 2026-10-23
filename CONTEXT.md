@@ -39,6 +39,10 @@ _Avoid_: Mother tongue, first language, UI language
 How well the user knows Catalan, on the CEFR scale from A1 to C2, as they judge it themselves.
 _Avoid_: Proficiency, skill, grade
 
+**Tier**:
+One of three groups of levels that replies are pitched at: A1–A2, B1–B2 and C1–C2. Neighbouring levels share a tier.
+_Avoid_: Band, bracket, difficulty
+
 **Onboarding**:
 The steps on a first visit that fill in the learner profile before the session starts.
 _Avoid_: Setup, sign-up, welcome flow

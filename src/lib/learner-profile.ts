@@ -82,12 +82,10 @@ export function subscribeToLearnerProfile(): () => void {
   return () => {};
 }
 
-// Returns false if the browser refused to store it.
-export function storeLearnerProfile(profile: LearnerProfile): boolean {
+// A profile the browser refuses to store is left unstored, and asked for
+// again on the next visit.
+export function storeLearnerProfile(profile: LearnerProfile) {
   try {
     localStorage.setItem(KEY, JSON.stringify({ version: VERSION, ...profile }));
-    return true;
-  } catch {
-    return false;
-  }
+  } catch {}
 }

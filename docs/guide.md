@@ -277,7 +277,7 @@ Two exchanges are the same when both the message and the reply read the same, wh
 
 ## Learner profile
 
-On a first visit, once the secret phrase has been entered, the chat asks two questions in place of "Iniciar la sessió": the language the learner reads best, from English, Español, Euskara, Galego, Français and Deutsch, and their level of Catalan, from A1 to C2. Finishing stores the answers as the learner profile and starts the session. A returning learner sees "Iniciar la sessió" as before.
+On a first visit, once the secret phrase has been entered, the chat asks two questions in place of "Iniciar la sessió": the language the user reads best, from English, Español, Euskara, Galego, Français and Deutsch, and their level of Catalan, from A1 to C2. Finishing stores the answers as the learner profile and starts the session. A returning user sees "Iniciar la sessió" as before.
 
 Every request to `/api/chat` carries the profile as two codes beside the messages, as in `"profile": {"nativeLanguage": "en", "level": "A1"}`, and the server builds the system prompt from them. It pitches the six levels as three tiers:
 
@@ -287,7 +287,7 @@ Every request to `/api/chat` carries the profile as two codes beside the message
 
 Replies stay in Catalan at every tier. A profile that is missing or not one of the codes gets the prompt for no profile, `SYSTEM_PROMPT`. A translation ignores the profile. The `reply_tokens` log line names the tier, or `null` when there was none.
 
-The profile is kept in the browser's `localStorage` under `learner-profile`, with the same limits as saved exchanges: one browser on one device, gone when the site's data is cleared. If the browser won't store it, the session starts anyway, and the learner is asked again on their next visit. All reading and writing of it is in `src/lib/learner-profile.ts`.
+The profile is kept in the browser's `localStorage` under `learner-profile`, with the same limits as saved exchanges: one browser on one device, gone when the site's data is cleared. If the browser won't store it, the session starts anyway, and the user is asked again on their next visit. All reading and writing of it is in `src/lib/learner-profile.ts`.
 
 ## Secret phrase
 

@@ -25,9 +25,10 @@ const DELETED = "S'ha suprimit.";
 const RESTORE_FAILURE = "No s'ha pogut recuperar.";
 const OPTIONS_BUTTON = "Opcions de la resposta";
 const SAVE_FAILURE = "No s'ha pogut desar.";
-const NATIVE_LANGUAGE_QUESTION = "Quina llengua llegeixes millor?";
-const LEVEL_QUESTION = "Quin és el teu nivell de català?";
-const FINISH_BUTTON = "Comença";
+// Each named in Catalan and in English.
+const NATIVE_LANGUAGE_QUESTION = "Quina llengua llegeixes millor? Which language do you read best?";
+const LEVEL_QUESTION = "Quin és el teu nivell de català? What is your level of Catalan?";
+const FINISH_BUTTON = "Comença Start";
 const NOTHING_SAVED =
   "Encara no has desat res. Toca una resposta i després el marcador per desar-la.";
 
@@ -359,7 +360,7 @@ function translateToggle() {
 beforeEach(() => {
   vi.restoreAllMocks();
   localStorage.clear();
-  // A returning learner, unless a test says otherwise.
+  // A returning user, unless a test says otherwise.
   localStorage.setItem(PROFILE_KEY, storedProfile("en", "B1"));
   resetTokenUsage();
   vi.stubGlobal("fetch", fetchMock);
@@ -407,7 +408,7 @@ describe("locked", () => {
 describe("onboarding", () => {
   beforeEach(() => localStorage.removeItem(PROFILE_KEY));
 
-  test("asks a first-time learner which language they read best, in place of the start button", () => {
+  test("asks a first-time user which language they read best, in place of the start button", () => {
     render(<Chat initiallyUnlocked />);
 
     const question = screen.getByRole("group", { name: NATIVE_LANGUAGE_QUESTION });
@@ -416,7 +417,6 @@ describe("onboarding", () => {
         .getAllByRole("button")
         .map((button) => button.textContent),
     ).toEqual(["English", "Español", "Euskara", "Galego", "Français", "Deutsch"]);
-    expect(screen.getByText("Which language do you read best?")).toBeDefined();
     expect(screen.queryByRole("button", { name: START_BUTTON })).toBeNull();
     expect(input().disabled).toBe(true);
   });
@@ -498,7 +498,7 @@ describe("onboarding", () => {
 });
 
 describe("starting a session", () => {
-  test("sends a returning learner's stored profile with the greeting and every message", async () => {
+  test("sends a returning user's stored profile with the greeting and every message", async () => {
     localStorage.setItem(PROFILE_KEY, storedProfile("eu", "B2"));
     await renderStarted();
 
@@ -2094,7 +2094,7 @@ describe("a save that can't be stored", () => {
 describe("storage that is blocked", () => {
   test("shows nothing saved, leaves the chat working, and says a save couldn't be stored", async () => {
     blockStorage();
-    // No profile can be read, so the learner is asked for one.
+    // No profile can be read, so the user is asked for one.
     answer = reply("Hola!");
     render(<Chat initiallyUnlocked />);
     await onboard("English", "B1");
