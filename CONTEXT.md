@@ -27,6 +27,22 @@ _Avoid_: Saved pair, saved phrase, bookmark, favourite
 What a reply shows under it once the user opens it: to hear the reply spoken, and to keep its exchange as a saved exchange. One reply's offer is open at a time.
 _Avoid_: Menu, actions, toolbar
 
+**Learner profile**:
+What the app knows about the user as a learner: their native language and their level. It shapes every reply but a translation. It is kept on the user's device only.
+_Avoid_: Settings, preferences, account, user profile
+
+**Native language**:
+The language, chosen from a fixed list, that the user reads best, used to explain Catalan to them while their level is low.
+_Avoid_: Mother tongue, first language, UI language
+
+**Level**:
+How well the user knows Catalan, on the CEFR scale from A1 to C2, as they judge it themselves.
+_Avoid_: Proficiency, skill, grade
+
+**Onboarding**:
+The steps on a first visit that fill in the learner profile before the session starts.
+_Avoid_: Setup, sign-up, welcome flow
+
 **Conversation**:
 The messages and replies exchanged since the user last started afresh.
 _Avoid_: Thread, history
