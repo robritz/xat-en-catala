@@ -1,6 +1,6 @@
 # The deploy pipeline of the model host. A merge to main that changes
 # model/Dockerfile or infra/service/ runs it, through the trigger
-# infra/platform creates; it can also be run by hand, as the README shows. The
+# infra/platform creates; it can also be run by hand, as docs/guide.md shows. The
 # source is the whole repository.
 #
 # It builds nothing. It waits for the service image that model/Dockerfile

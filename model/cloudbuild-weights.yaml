@@ -2,7 +2,7 @@
 # service image copies the file from it, so a routine deploy never moves the
 # weights.
 #
-# Run by hand, once, and again only when the weights change, as the README
+# Run by hand, once, and again only when the weights change, as docs/guide.md
 # shows. It needs no source: the file comes from the bucket that
 # model/mirror-weights.sh mirrors it into, never from Hugging Face. The tag
 # is the one model/Dockerfile names as WEIGHTS_TAG.
