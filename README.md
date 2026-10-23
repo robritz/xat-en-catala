@@ -26,3 +26,7 @@ npm install
 cp .env.example .env.local   # fill in the values; see docs/guide.md
 npm run dev
 ```
+
+## Demo
+
+Since the models and text-to-speech are hosted on real cloud instances, they incur costs if left open. If you're interested in checking out the application in production please send a note via my contact details [here](https://robritz.com/contact/).
