@@ -1,6 +1,7 @@
 import { createUIMessageStreamResponse, streamText, toUIMessageStream } from "ai";
 import { toModelMessages, translationRequest } from "@/lib/chat";
-import { chatModel, SIGN_OFFS, SYSTEM_PROMPT, TRANSLATION_PROMPT } from "@/lib/model-host";
+import { toLearnerProfile } from "@/lib/learner-profile";
+import { chatModel, SIGN_OFFS, teacherPrompt, tierOf, TRANSLATION_PROMPT } from "@/lib/model-host";
 import type { ReplyUsage } from "@/lib/token-usage";
 import { isUnlocked } from "@/lib/unlock";
 
@@ -21,11 +22,13 @@ export async function POST(request: Request) {
   }
   // A translation is made of the newest message alone, without the conversation.
   const translation = translationRequest(body.messages);
+  // Anything but a profile from the lists gets the instructions for no profile.
+  const profile = toLearnerProfile(body.profile);
 
   try {
     const result = streamText({
       model: chatModel(),
-      instructions: translation ? TRANSLATION_PROMPT : SYSTEM_PROMPT,
+      instructions: translation ? TRANSLATION_PROMPT : teacherPrompt(profile),
       messages: translation ?? conversation,
       // A translation may be of a text that ends with a sign-off.
       stopSequences: translation ? undefined : SIGN_OFFS,
@@ -38,6 +41,7 @@ export async function POST(request: Request) {
             inputTokens: totalUsage.inputTokens,
             outputTokens: totalUsage.outputTokens,
             translation: translation !== null,
+            tier: profile && !translation ? tierOf(profile.level) : null,
           }),
         ),
     });

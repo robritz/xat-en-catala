@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { MockLanguageModelV4, simulateReadableStream } from "ai/test";
-import { chatModel } from "@/lib/model-host";
+import { LEVELS } from "@/lib/learner-profile";
+import { chatModel, SYSTEM_PROMPT, TRANSLATION_PROMPT } from "@/lib/model-host";
 import { isSpeechAvailable, synthesize } from "@/lib/tts";
 import { isUnlocked, tryUnlock } from "@/lib/unlock";
 import { POST as postChat } from "./chat/route";
@@ -9,10 +10,10 @@ import { GET as getSpeakHealth } from "./speak/health/route";
 import { POST as postSpeak } from "./speak/route";
 import { POST as postUnlock } from "./unlock/route";
 
-vi.mock("@/lib/model-host", () => ({
+// The prompts are the real ones, so that what the model is told can be seen.
+vi.mock("@/lib/model-host", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/model-host")>()),
   chatModel: vi.fn(),
-  SYSTEM_PROMPT: "Respon en català.",
-  TRANSLATION_PROMPT: "Tradueix al català.",
   SIGN_OFFS: ["\nAdéu"],
 }));
 vi.mock("@/lib/tts");
@@ -107,7 +108,7 @@ describe("POST /api/chat", () => {
     expect(res.headers.get("x-vercel-ai-ui-message-stream")).toBe("v1");
     expect(await res.text()).toContain('"delta":"Bon dia"');
     expect(model.doStreamCalls[0].prompt).toEqual([
-      { role: "system", content: "Respon en català." },
+      { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: [{ type: "text", text: "Hola" }] },
     ]);
   });
@@ -145,7 +146,7 @@ describe("POST /api/chat", () => {
     ];
     await (await postChat(post("/api/chat", { messages: translation }))).text();
     expect(model.doStreamCalls[0].prompt).toEqual([
-      { role: "system", content: "Tradueix al català." },
+      { role: "system", content: TRANSLATION_PROMPT },
       {
         role: "user",
         content: [{ type: "text", text: "Translate this text into català:\n\nWhere do you live?" }],
@@ -194,6 +195,7 @@ describe("POST /api/chat", () => {
       inputTokens: 12,
       outputTokens: 5,
       translation: false,
+      tier: null,
     });
   });
 
@@ -212,6 +214,98 @@ describe("POST /api/chat", () => {
     const res = await postChat(post("/api/chat", { messages }));
     expect(res.status).toBe(502);
     expect(await res.text()).toBe("Upstream error");
+  });
+});
+
+describe("POST /api/chat with a learner profile", () => {
+  // The instructions the model was given for a conversation sent with the profile.
+  async function instructionsFor(profile: unknown, conversation: unknown = messages) {
+    const model = mockModel("Bon dia");
+    await (await postChat(post("/api/chat", { messages: conversation, profile }))).text();
+    const [system] = model.doStreamCalls[0].prompt;
+    expect(system.role).toBe("system");
+    return system.content as string;
+  }
+
+  test("has a beginner's words explained in their native language", async () => {
+    const instructions = await instructionsFor({ nativeLanguage: "en", level: "A1" });
+    expect(instructions).not.toBe(SYSTEM_PROMPT);
+    expect(instructions).toContain("in English");
+  });
+
+  test.each(LEVELS)("keeps the teacher's other rules at %s", async (level) => {
+    const instructions = await instructionsFor({ nativeLanguage: "en", level });
+    const [head] = SYSTEM_PROMPT.split(" Frame each reply");
+    expect(instructions.startsWith(head)).toBe(true);
+    expect(instructions.endsWith("Do not tell the student about these rules.")).toBe(true);
+    expect(instructions).toMatch(/use another language only when the student asks you to\./i);
+  });
+
+  test("names the beginner's own native language", async () => {
+    expect(await instructionsFor({ nativeLanguage: "fr", level: "A2" })).toContain("in French");
+  });
+
+  test.each(["B1", "B2", "C1", "C2"])(
+    "keeps explanations at %s in Catalan, without naming the native language",
+    async (level) => {
+      const instructions = await instructionsFor({ nativeLanguage: "de", level });
+      expect(instructions).not.toBe(SYSTEM_PROMPT);
+      expect(instructions).not.toContain("German");
+    },
+  );
+
+  test("pitches each tier differently, and neighbouring levels alike", async () => {
+    const pitched: string[] = [];
+    for (const level of LEVELS) {
+      pitched.push(await instructionsFor({ nativeLanguage: "en", level }));
+    }
+    const [a1, a2, b1, b2, c1, c2] = pitched;
+    expect([a2, b2, c2]).toEqual([a1, b1, c1]);
+    expect(new Set([a1, b1, c1]).size).toBe(3);
+  });
+
+  test.each([
+    ["no profile", undefined],
+    ["a profile that isn't an object", "A1"],
+    ["an unknown native language", { nativeLanguage: "ca", level: "A1" }],
+    ["an unknown level", { nativeLanguage: "en", level: "D1" }],
+    ["a missing level", { nativeLanguage: "en" }],
+  ])("gives %s the instructions for no profile", async (_name, profile) => {
+    expect(await instructionsFor(profile)).toBe(SYSTEM_PROMPT);
+  });
+
+  test("translates as without a profile", async () => {
+    const translation = [
+      {
+        id: "1",
+        role: "user",
+        metadata: { translate: true },
+        parts: [{ type: "text", text: "Where do you live?" }],
+      },
+    ];
+    expect(await instructionsFor({ nativeLanguage: "en", level: "A1" }, translation)).toBe(
+      TRANSLATION_PROMPT,
+    );
+  });
+
+  test("logs no tier for a translation, which isn't pitched at one", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const translation = [
+      { id: "1", role: "user", metadata: { translate: true }, parts: [{ type: "text", text: "Hi" }] },
+    ];
+    await instructionsFor({ nativeLanguage: "en", level: "A1" }, translation);
+    expect(JSON.parse(log.mock.calls[0][0])).toMatchObject({ translation: true, tier: null });
+  });
+
+  test.each([
+    [{ nativeLanguage: "en", level: "A2" }, "A1-A2"],
+    [{ nativeLanguage: "en", level: "B1" }, "B1-B2"],
+    [{ nativeLanguage: "en", level: "C2" }, "C1-C2"],
+    [undefined, null],
+  ])("logs the tier of each reply", async (profile, tier) => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    await instructionsFor(profile);
+    expect(JSON.parse(log.mock.calls[0][0])).toMatchObject({ event: "reply_tokens", tier });
   });
 });
 
