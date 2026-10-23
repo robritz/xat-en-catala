@@ -4,10 +4,10 @@
 
 **Blocked by:** 01 — Replies pitched at the learner profile.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Stored data that is unparseable, of another version, or has a native language or level outside the lists is read as no profile, and onboarding is shown.
-- [ ] Such data is left as it is until the next write, which replaces it.
-- [ ] If the browser refuses the write, the session starts, and every request in the visit carries the profile chosen.
-- [ ] A refused write shows no error.
-- [ ] Chat tests cover each kind of unreadable data and a refused write, following the saved exchanges tests for storage that can't be read or written.
+- [x] Stored data that is unparseable, of another version, or has a native language or level outside the lists is read as no profile, and onboarding is shown.
+- [x] Such data is left as it is until the next write, which replaces it.
+- [x] If the browser refuses the write, the session starts, and every request in the visit carries the profile chosen.
+- [x] A refused write shows no error.
+- [x] Chat tests cover each kind of unreadable data and a refused write, following the saved exchanges tests for storage that can't be read or written.

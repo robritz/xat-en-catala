@@ -581,6 +581,78 @@ describe("onboarding", () => {
   });
 });
 
+describe("a learner profile that can't be read or stored", () => {
+  test.each([
+    ["isn't JSON", "{not json"],
+    ["isn't an object", JSON.stringify("en B1")],
+    ["is of another version", JSON.stringify({ version: 2, nativeLanguage: "en", level: "B1" })],
+    ["has no version", JSON.stringify({ nativeLanguage: "en", level: "B1" })],
+    ["has an unknown native language", storedProfile("ca", "B1")],
+    ["has an unknown level", storedProfile("en", "D1")],
+    ["is missing its level", JSON.stringify({ version: 1, nativeLanguage: "en" })],
+  ])("asks again for a stored profile that %s, and leaves it until replaced", async (_name, stored) => {
+    localStorage.setItem(PROFILE_KEY, stored);
+    render(<Chat initiallyUnlocked />);
+
+    expect(screen.getByRole("group", { name: NATIVE_LANGUAGE_QUESTION })).toBeDefined();
+    expect(screen.queryByRole("button", { name: START_BUTTON })).toBeNull();
+    expect(localStorage.getItem(PROFILE_KEY)).toBe(stored);
+
+    answer = reply("Hola!");
+    await onboard("English", "A2");
+
+    expect(JSON.parse(localStorage.getItem(PROFILE_KEY)!)).toEqual({
+      version: 1,
+      nativeLanguage: "en",
+      level: "A2",
+    });
+  });
+
+  test("starts the session with a profile the browser refused to store, and says nothing of it", async () => {
+    localStorage.removeItem(PROFILE_KEY);
+    refuseWrites();
+    answer = reply("Hola!");
+    render(<Chat initiallyUnlocked />);
+
+    await onboard("Español", "B2");
+    await send("Hello");
+
+    expect(screen.getByText("Hola!")).toBeDefined();
+    expect(screen.getAllByRole("alert").map((alert) => alert.textContent)).toEqual([""]);
+    expect(input().disabled).toBe(false);
+    expect(sentProfiles()).toEqual([
+      { nativeLanguage: "es", level: "B2" },
+      { nativeLanguage: "es", level: "B2" },
+    ]);
+    expect(localStorage.getItem(PROFILE_KEY)).toBeNull();
+  });
+
+  test("asks again on the next visit after a refused write", async () => {
+    localStorage.removeItem(PROFILE_KEY);
+    const allowWrites = refuseWrites();
+    answer = reply("Hola!");
+    render(<Chat initiallyUnlocked />);
+    await onboard("English", "C1");
+    allowWrites();
+
+    cleanup();
+    render(<Chat initiallyUnlocked />);
+
+    expect(screen.getByRole("group", { name: NATIVE_LANGUAGE_QUESTION })).toBeDefined();
+  });
+
+  test("starts the session when storage can't be read at all", async () => {
+    blockStorage();
+    answer = reply("Hola!");
+    render(<Chat initiallyUnlocked />);
+
+    await onboard("Deutsch", "A1");
+
+    expect(screen.getByText("Hola!")).toBeDefined();
+    expect(sentProfiles()).toEqual([{ nativeLanguage: "de", level: "A1" }]);
+  });
+});
+
 describe("starting a session", () => {
   test("sends a returning user's stored profile with the greeting and every message", async () => {
     localStorage.setItem(PROFILE_KEY, storedProfile("eu", "B2"));
