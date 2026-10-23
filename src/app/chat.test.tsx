@@ -582,7 +582,9 @@ describe("onboarding", () => {
 });
 
 describe("a learner profile that can't be read or stored", () => {
-  test.each([
+  beforeEach(() => localStorage.removeItem(PROFILE_KEY));
+
+  const unreadable = [
     ["isn't JSON", "{not json"],
     ["isn't an object", JSON.stringify("en B1")],
     ["is of another version", JSON.stringify({ version: 2, nativeLanguage: "en", level: "B1" })],
@@ -590,15 +592,22 @@ describe("a learner profile that can't be read or stored", () => {
     ["has an unknown native language", storedProfile("ca", "B1")],
     ["has an unknown level", storedProfile("en", "D1")],
     ["is missing its level", JSON.stringify({ version: 1, nativeLanguage: "en" })],
-  ])("asks again for a stored profile that %s, and leaves it until replaced", async (_name, stored) => {
-    localStorage.setItem(PROFILE_KEY, stored);
+  ];
+
+  test.each(unreadable)("asks again for a stored profile that %s", (_, junk) => {
+    localStorage.setItem(PROFILE_KEY, junk);
     render(<Chat initiallyUnlocked />);
 
     expect(screen.getByRole("group", { name: NATIVE_LANGUAGE_QUESTION })).toBeDefined();
     expect(screen.queryByRole("button", { name: START_BUTTON })).toBeNull();
-    expect(localStorage.getItem(PROFILE_KEY)).toBe(stored);
+    expect(localStorage.getItem(PROFILE_KEY)).toBe(junk);
+  });
 
+  test.each(unreadable)("replaces a stored profile that %s once onboarding is done", async (_, junk) => {
+    localStorage.setItem(PROFILE_KEY, junk);
     answer = reply("Hola!");
+    render(<Chat initiallyUnlocked />);
+
     await onboard("English", "A2");
 
     expect(JSON.parse(localStorage.getItem(PROFILE_KEY)!)).toEqual({
@@ -609,16 +618,17 @@ describe("a learner profile that can't be read or stored", () => {
   });
 
   test("starts the session with a profile the browser refused to store, and says nothing of it", async () => {
-    localStorage.removeItem(PROFILE_KEY);
     refuseWrites();
     answer = reply("Hola!");
     render(<Chat initiallyUnlocked />);
-
     await onboard("Español", "B2");
+    answer = reply("Bon dia!");
+
     await send("Hello");
 
-    expect(screen.getByText("Hola!")).toBeDefined();
-    expect(screen.getAllByRole("alert").map((alert) => alert.textContent)).toEqual([""]);
+    expect(screen.getByText("Bon dia!")).toBeDefined();
+    expect(screen.queryByText(/No s'ha pogut/)).toBeNull();
+    expect(screen.queryByText(NO_REPLY)).toBeNull();
     expect(input().disabled).toBe(false);
     expect(sentProfiles()).toEqual([
       { nativeLanguage: "es", level: "B2" },
@@ -628,11 +638,12 @@ describe("a learner profile that can't be read or stored", () => {
   });
 
   test("asks again on the next visit after a refused write", async () => {
-    localStorage.removeItem(PROFILE_KEY);
     const allowWrites = refuseWrites();
     answer = reply("Hola!");
     render(<Chat initiallyUnlocked />);
     await onboard("English", "C1");
+    // The profile was offered to the browser, which refused it.
+    expect(Storage.prototype.setItem).toHaveBeenCalledWith(PROFILE_KEY, expect.any(String));
     allowWrites();
 
     cleanup();
@@ -641,7 +652,9 @@ describe("a learner profile that can't be read or stored", () => {
     expect(screen.getByRole("group", { name: NATIVE_LANGUAGE_QUESTION })).toBeDefined();
   });
 
-  test("starts the session when storage can't be read at all", async () => {
+  // The saved exchanges' test of blocked storage covers the chat; this one
+  // covers what is sent.
+  test("sends the profile chosen when storage can't be used at all", async () => {
     blockStorage();
     answer = reply("Hola!");
     render(<Chat initiallyUnlocked />);
