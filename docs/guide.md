@@ -275,6 +275,20 @@ When storage doesn't behave, the list fails safely:
 
 Two exchanges are the same when both the message and the reply read the same, which is how a reply is known to be saved after a reload. All reading and writing of the list is in `src/lib/saved-exchanges.ts`.
 
+## Learner profile
+
+On a first visit, once the secret phrase has been entered, the chat asks two questions in place of "Iniciar la sessió": the language the learner reads best, from English, Español, Euskara, Galego, Français and Deutsch, and their level of Catalan, from A1 to C2. Finishing stores the answers as the learner profile and starts the session. A returning learner sees "Iniciar la sessió" as before.
+
+Every request to `/api/chat` carries the profile as two codes beside the messages, as in `"profile": {"nativeLanguage": "en", "level": "A1"}`, and the server builds the system prompt from them. It pitches the six levels as three tiers:
+
+- **A1–A2:** short sentences, the present tense and common words, and one word or expression a reply explained in the native language;
+- **B1–B2:** everyday Catalan with past tenses and idioms, and words likely to be new explained in Catalan;
+- **C1–C2:** natural Catalan, with no explanations unless asked.
+
+Replies stay in Catalan at every tier. A profile that is missing or not one of the codes gets the prompt for no profile, `SYSTEM_PROMPT`. A translation ignores the profile. The `reply_tokens` log line names the tier, or `null` when there was none.
+
+The profile is kept in the browser's `localStorage` under `learner-profile`, with the same limits as saved exchanges: one browser on one device, gone when the site's data is cleared. If the browser won't store it, the session starts anyway, and the learner is asked again on their next visit. All reading and writing of it is in `src/lib/learner-profile.ts`.
+
 ## Secret phrase
 
 The chat is locked until the user types the secret phrase set in `CHAT_SECRET_PHRASE` (case and extra spaces are ignored). Until then, anything typed is checked as the phrase and never sent to the model, and the UI shows "Please enter the secret phrase to start chatting."
@@ -288,11 +302,12 @@ This is a light gate to keep casual visitors out, not real authentication. Anyon
 | Path                                | Purpose                                                         |
 | ----------------------------------- | --------------------------------------------------------------- |
 | `src/lib/chat.ts`                   | Validates the browser's messages, reduces them to plain text, and picks out translation requests |
-| `src/lib/model-host.ts`             | System and translation prompts, sampling values, and the AI SDK model for the model host |
+| `src/lib/model-host.ts`             | System prompt for each tier, translation prompt, sampling values, and the AI SDK model for the model host |
 | `src/lib/unlock.ts`                 | Secret phrase check and unlock cookie                           |
 | `src/lib/speech-text.ts`            | Normalizes a reply into text the TTS model can read             |
 | `src/lib/tts.ts`                    | Voice settings, and the speech and health requests to the Matxa-TTS API |
 | `src/lib/saved-exchanges.ts`        | Reads and writes the saved exchanges in the browser's `localStorage` |
+| `src/lib/learner-profile.ts`        | The native languages and levels, the check of a profile, and its storage in `localStorage` |
 | `src/lib/token-usage.ts`            | The token counts of the conversation, readable from any component with `useTokenUsage` |
 | `docs/comparison/`                  | A fixed set of messages for comparing model hosts, the replies of the host before Cloud Run and of Cloud Run, and a script to replay them |
 | `model/Dockerfile`                  | The model host's service image: llama.cpp's server, the weights and the server's flags |
@@ -314,12 +329,13 @@ This is a light gate to keep casual visitors out, not real authentication. Anyon
 | `src/app/chat.tsx`                  | Chat UI (client component)                                      |
 | `src/app/reply.tsx`                 | Formats the text of a reply                                     |
 | `src/app/saved-exchanges.tsx`       | The list of saved exchanges                                     |
+| `src/app/onboarding.tsx`            | The two questions that fill in the learner profile              |
 | `src/app/listen-button.tsx`         | The button that speaks a reply, in the conversation and the list |
 | `src/app/path-icon.tsx`             | An icon drawn from a single path                                |
 | `src/app/layout.tsx`                | Root layout and mobile viewport settings                        |
 | `src/app/robots.txt`                | Asks search engines not to crawl the site                       |
 
-To change the model's behavior, edit `SYSTEM_PROMPT` in `src/lib/model-host.ts`; `TRANSLATION_PROMPT` in the same file is used for messages sent with translation on. To change the session-start message, edit `GREETING_PROMPT` in `src/app/chat.tsx`.
+To change the model's behavior, edit `SYSTEM_PROMPT`, the prompt for no profile, and `teacherPrompt`, the prompt for each tier, in `src/lib/model-host.ts`; `TRANSLATION_PROMPT` in the same file is used for messages sent with translation on. To change the session-start message, edit `GREETING_PROMPT` in `src/app/chat.tsx`.
 
 ## Mobile
 

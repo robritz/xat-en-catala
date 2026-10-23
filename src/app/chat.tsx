@@ -1,8 +1,15 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import type { UIMessage } from "ai";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { DefaultChatTransport, type UIMessage } from "ai";
+import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  type LearnerProfile,
+  storedLearnerProfile,
+  storeLearnerProfile,
+  subscribeToLearnerProfile,
+  unreadLearnerProfile,
+} from "@/lib/learner-profile";
 import {
   type Exchange,
   isSameExchange,
@@ -18,6 +25,7 @@ import ListenButton, {
   OFFER_BUTTON_STYLE,
   type Sound,
 } from "./listen-button";
+import Onboarding from "./onboarding";
 import Icon from "./path-icon";
 import Reply from "./reply";
 import Spinner from "./spinner";
@@ -126,8 +134,23 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
   // The reply the model stopped writing because its context window was full.
   // The model host cuts such a reply mid-sentence and reports no error.
   const [cutShortId, setCutShortId] = useState<string | null>(null);
+  // Undefined until storage has been read, which can't be done on the server.
+  const storedProfile = useSyncExternalStore(
+    subscribeToLearnerProfile,
+    storedLearnerProfile,
+    unreadLearnerProfile,
+  );
+  // The profile chosen in this visit, which holds even if it couldn't be stored.
+  const [chosenProfile, setChosenProfile] = useState<LearnerProfile | null>(null);
+  const profile = chosenProfile ?? storedProfile;
+  // What each request is sent with, read as it is sent.
+  const profileRef = useRef<LearnerProfile | null>(null);
+  const [transport] = useState(
+    () => new DefaultChatTransport<ChatMessage>({ body: () => ({ profile: profileRef.current }) }),
+  );
   const { messages, sendMessage, regenerate, setMessages, status, error, clearError } =
     useChat<ChatMessage>({
+      transport,
       // The session has started once the model has answered the greeting.
       onFinish: ({ message, isAbort, isDisconnect, isError, finishReason }) => {
         if (isAbort || isDisconnect || isError) return;
@@ -383,6 +406,19 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
     if (!speakingId) audioRef.current?.pause();
   }, [speakingId]);
 
+  useEffect(() => {
+    profileRef.current = profile ?? null;
+  }, [profile]);
+
+  // Onboarding is done: the session starts with the profile it filled in.
+  function finishOnboarding(chosen: LearnerProfile) {
+    storeLearnerProfile(chosen);
+    // Set now, as the greeting is sent before the effect would set it.
+    profileRef.current = chosen;
+    setChosenProfile(chosen);
+    startSession();
+  }
+
   function startSession() {
     // Drop the greeting left behind by a failed attempt.
     setMessages([]);
@@ -542,7 +578,8 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
                   </div>
                 )}
               </div>
-              {!loading && (
+              {!loading && profile === null && <Onboarding onFinish={finishOnboarding} />}
+              {!loading && profile && (
                 <button
                   onClick={startSession}
                   className="rounded-full bg-accent px-5 py-2 font-medium text-white"

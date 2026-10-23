@@ -25,6 +25,9 @@ const DELETED = "S'ha suprimit.";
 const RESTORE_FAILURE = "No s'ha pogut recuperar.";
 const OPTIONS_BUTTON = "Opcions de la resposta";
 const SAVE_FAILURE = "No s'ha pogut desar.";
+const NATIVE_LANGUAGE_QUESTION = "Quina llengua llegeixes millor?";
+const LEVEL_QUESTION = "Quin és el teu nivell de català?";
+const FINISH_BUTTON = "Comença";
 const NOTHING_SAVED =
   "Encara no has desat res. Toca una resposta i després el marcador per desar-la.";
 
@@ -235,6 +238,28 @@ function refuseWrites() {
 }
 
 // Where the saved exchanges are stored, and the list as this version stores it.
+const PROFILE_KEY = "learner-profile";
+function storedProfile(nativeLanguage: string, level: string) {
+  return JSON.stringify({ version: 1, nativeLanguage, level });
+}
+
+// The learner profile each request to the model was sent with.
+function sentProfiles() {
+  return fetchMock.mock.calls
+    .filter(([url]) => url === "/api/chat")
+    .map(([, init]) => JSON.parse(init!.body as string).profile);
+}
+
+// Answers onboarding's two questions and finishes it.
+async function onboard(nativeLanguage: string, level: string) {
+  fireEvent.click(screen.getByRole("button", { name: nativeLanguage }));
+  fireEvent.click(screen.getByRole("radio", { name: level }));
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: FINISH_BUTTON }));
+  });
+  await settle();
+}
+
 const STORAGE_KEY = "saved-exchanges";
 type StoredExchange = { message: string; reply: string };
 function stored(exchanges: StoredExchange[]) {
@@ -334,6 +359,8 @@ function translateToggle() {
 beforeEach(() => {
   vi.restoreAllMocks();
   localStorage.clear();
+  // A returning learner, unless a test says otherwise.
+  localStorage.setItem(PROFILE_KEY, storedProfile("en", "B1"));
   resetTokenUsage();
   vi.stubGlobal("fetch", fetchMock);
   fetchMock.mockClear();
@@ -377,7 +404,112 @@ describe("locked", () => {
   });
 });
 
+describe("onboarding", () => {
+  beforeEach(() => localStorage.removeItem(PROFILE_KEY));
+
+  test("asks a first-time learner which language they read best, in place of the start button", () => {
+    render(<Chat initiallyUnlocked />);
+
+    const question = screen.getByRole("group", { name: NATIVE_LANGUAGE_QUESTION });
+    expect(
+      within(question)
+        .getAllByRole("button")
+        .map((button) => button.textContent),
+    ).toEqual(["English", "Español", "Euskara", "Galego", "Français", "Deutsch"]);
+    expect(screen.getByText("Which language do you read best?")).toBeDefined();
+    expect(screen.queryByRole("button", { name: START_BUTTON })).toBeNull();
+    expect(input().disabled).toBe(true);
+  });
+
+  test("waits for the secret phrase", async () => {
+    render(<Chat initiallyUnlocked={false} />);
+    expect(screen.queryByRole("group", { name: NATIVE_LANGUAGE_QUESTION })).toBeNull();
+
+    await send("open sesame");
+
+    expect(screen.getByRole("group", { name: NATIVE_LANGUAGE_QUESTION })).toBeDefined();
+  });
+
+  test("asks for the level once a native language is chosen", () => {
+    render(<Chat initiallyUnlocked />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Galego" }));
+
+    const question = screen.getByRole("radiogroup", { name: LEVEL_QUESTION });
+    expect(
+      within(question)
+        .getAllByRole("radio")
+        .map((radio) => (radio as HTMLInputElement).value),
+    ).toEqual(["A1", "A2", "B1", "B2", "C1", "C2"]);
+    expect(screen.queryByRole("group", { name: NATIVE_LANGUAGE_QUESTION })).toBeNull();
+    const finish = screen.getByRole<HTMLButtonElement>("button", { name: FINISH_BUTTON });
+    expect(finish.disabled).toBe(true);
+    fireEvent.click(screen.getByRole("radio", { name: "A2" }));
+    expect(finish.disabled).toBe(false);
+  });
+
+  test("stores the profile and starts the session with it when finished", async () => {
+    coldStart();
+    render(<Chat initiallyUnlocked />);
+
+    await onboard("Deutsch", "A1");
+
+    expect(JSON.parse(localStorage.getItem(PROFILE_KEY)!)).toEqual({
+      version: 1,
+      nativeLanguage: "de",
+      level: "A1",
+    });
+    expect(sentConversations()).toEqual([[{ role: "user", content: GREETING }]]);
+    expect(sentProfiles()).toEqual([{ nativeLanguage: "de", level: "A1" }]);
+    expect(screen.getByText(WAKE_MESSAGE)).toBeDefined();
+    expect(screen.queryByRole("radiogroup", { name: LEVEL_QUESTION })).toBeNull();
+  });
+
+  test("sends the profile chosen with every message after the greeting", async () => {
+    answer = reply("Hola!");
+    render(<Chat initiallyUnlocked />);
+    await onboard("Español", "C1");
+
+    await send("Hello");
+
+    expect(sentProfiles()).toEqual([
+      { nativeLanguage: "es", level: "C1" },
+      { nativeLanguage: "es", level: "C1" },
+    ]);
+  });
+
+  test("can be completed with the keyboard alone, and has no accessibility faults", async () => {
+    render(<Chat initiallyUnlocked />);
+    expect(await accessibilityFaults()).toEqual([]);
+
+    fireEvent.click(screen.getByRole("button", { name: "English" }));
+
+    expect(document.activeElement).toBe(screen.getAllByRole("radio")[0]);
+    expect(await accessibilityFaults()).toEqual([]);
+  });
+
+  test("lets the saved exchanges be read before it is finished", () => {
+    render(<Chat initiallyUnlocked />);
+
+    fireEvent.click(screen.getByRole("button", { name: SAVED_BUTTON }));
+
+    expect(screen.getByText(NOTHING_SAVED)).toBeDefined();
+  });
+});
+
 describe("starting a session", () => {
+  test("sends a returning learner's stored profile with the greeting and every message", async () => {
+    localStorage.setItem(PROFILE_KEY, storedProfile("eu", "B2"));
+    await renderStarted();
+
+    await send("Hello");
+
+    expect(sentProfiles()).toEqual([
+      { nativeLanguage: "eu", level: "B2" },
+      { nativeLanguage: "eu", level: "B2" },
+    ]);
+  });
+
   test("offers the start button and keeps chatting disabled until it's used", async () => {
     render(<Chat initiallyUnlocked />);
 
@@ -1962,7 +2094,11 @@ describe("a save that can't be stored", () => {
 describe("storage that is blocked", () => {
   test("shows nothing saved, leaves the chat working, and says a save couldn't be stored", async () => {
     blockStorage();
-    await renderStarted();
+    // No profile can be read, so the learner is asked for one.
+    answer = reply("Hola!");
+    render(<Chat initiallyUnlocked />);
+    await onboard("English", "B1");
+    answer = reply("Bon dia!");
 
     openSaved();
     expect(screen.getByText(NOTHING_SAVED)).toBeDefined();
