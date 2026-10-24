@@ -25,8 +25,8 @@ type Step =
 // Asks a first-time user for their native language, then their level. The
 // first question is in Catalan with English beneath, as the language a user
 // without Catalan is most likely to read; the second is in the language chosen.
-// Given a profile, it asks again to change it, with its answers chosen, and
-// can be closed without changing anything.
+// Given a profile, it asks both questions at once to change it, with its
+// answers chosen, and can be closed without changing anything.
 export default function Onboarding({
   profile,
   onFinish,
@@ -48,10 +48,13 @@ export default function Onboarding({
   // nothing else moves it, so it stays where it was when onboarding appears.
   const movedStep = useRef(false);
   const id = useId();
+  // Changing a profile asks both questions at once, so that either can be
+  // changed alone.
+  const changing = profile !== undefined;
 
   // Opened to change the profile, from a button that the questions now hide.
   useEffect(() => {
-    if (profile) chosenLanguageRef.current?.focus();
+    if (changing) chosenLanguageRef.current?.focus();
     // Only as it opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -75,7 +78,7 @@ export default function Onboarding({
       }}
       className="space-y-4"
     >
-      {step.asking === "native language" ? (
+      {(changing || step.asking === "native language") && (
         <div role="group" aria-labelledby={`${id}-ca ${id}-en`} className="space-y-4 text-center">
           <div>
             <p id={`${id}-ca`} className="font-medium">
@@ -91,7 +94,12 @@ export default function Onboarding({
                 key={code}
                 ref={code === step.nativeLanguage ? chosenLanguageRef : undefined}
                 lang={code}
-                onClick={() => moveTo({ asking: "level", nativeLanguage: code })}
+                onClick={() =>
+                  // Changing a profile, the level is asked beside it already.
+                  changing
+                    ? setStep({ asking: "native language", nativeLanguage: code })
+                    : moveTo({ asking: "level", nativeLanguage: code })
+                }
                 aria-pressed={code === step.nativeLanguage}
                 className={`${CHOICE_STYLE} aria-pressed:border-accent`}
               >
@@ -100,15 +108,20 @@ export default function Onboarding({
             ))}
           </div>
         </div>
-      ) : (
+      )}
+      {(changing || step.asking === "level") && step.nativeLanguage && (
         <LevelStep
           id={id}
           nativeLanguage={step.nativeLanguage}
           level={level}
           levelRef={levelRef}
-          changing={profile !== undefined}
+          changing={changing}
           onLevel={setLevel}
-          onBack={() => moveTo({ asking: "native language", nativeLanguage: step.nativeLanguage })}
+          onBack={
+            changing
+              ? undefined
+              : () => moveTo({ asking: "native language", nativeLanguage: step.nativeLanguage })
+          }
           onFinish={onFinish}
         />
       )}
@@ -141,7 +154,8 @@ function LevelStep({
   levelRef: React.RefObject<HTMLInputElement | null>;
   changing: boolean;
   onLevel: (level: Level) => void;
-  onBack: () => void;
+  // Absent when the native language question is beside it.
+  onBack?: () => void;
   onFinish: (profile: LearnerProfile) => void;
 }) {
   const text = LEVEL_STEP_TEXT[nativeLanguage];
@@ -177,9 +191,11 @@ function LevelStep({
         </div>
       </div>
       <div className="flex justify-center gap-3">
-        <button type="button" onClick={onBack} className={CHOICE_STYLE}>
-          {text.back}
-        </button>
+        {onBack && (
+          <button type="button" onClick={onBack} className={CHOICE_STYLE}>
+            {text.back}
+          </button>
+        )}
         <button
           type="submit"
           disabled={!level}

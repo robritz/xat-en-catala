@@ -710,9 +710,35 @@ describe("changing the learner profile", () => {
     const english = screen.getByRole("button", { name: "English" });
     expect(english.getAttribute("aria-pressed")).toBe("true");
     expect(document.activeElement).toBe(english);
-    fireEvent.click(english);
+    // Both are asked at once, so either can be changed alone.
     expect((levelRadio("B1") as HTMLInputElement).checked).toBe(true);
     expect(screen.getByRole("button", { name: SAVE_IN.English })).toBeDefined();
+  });
+
+  test("changes the level alone, keeping the native language", async () => {
+    await renderStarted();
+    fireEvent.click(profileButton("B1"));
+
+    fireEvent.click(levelRadio("C2"));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: SAVE_IN.English }));
+    });
+    await send("Hello");
+
+    expect(profileButton("C2")).toBeDefined();
+    expect(sentProfiles().at(-1)).toEqual({ nativeLanguage: "en", level: "C2" });
+  });
+
+  test("asks the level in the native language chosen, keeping the level chosen", () => {
+    render(<Chat initiallyUnlocked />);
+    fireEvent.click(profileButton("B1"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Deutsch" }));
+
+    expect(screen.getByRole("button", { name: "Deutsch" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("radiogroup", { name: ASKED_IN.Deutsch.question })).toBeDefined();
+    expect((levelRadio("B1") as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByRole("button", { name: SAVE_IN.Deutsch })).toBeDefined();
   });
 
   test("stores a saved change and sends it from the next message, keeping the conversation", async () => {
