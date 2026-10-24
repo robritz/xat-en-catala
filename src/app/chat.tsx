@@ -184,6 +184,14 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
   const saved = useSavedExchanges();
   // While on, the saved exchanges are shown in place of the conversation.
   const [showingSaved, setShowingSaved] = useState(false);
+  // While on, the questions that change the learner profile are shown in
+  // place of the conversation.
+  const [changingProfile, setChangingProfile] = useState(false);
+  const awayFromChat = showingSaved || changingProfile;
+  const profileButtonRef = useRef<HTMLButtonElement>(null);
+  // Set when the questions close, so that the focus goes back to the button
+  // that opened them.
+  const closedProfile = useRef(false);
   // How far the conversation was scrolled when the saved exchanges took its
   // place, for as long as nothing more has arrived in it.
   const mainRef = useRef<HTMLElement>(null);
@@ -195,13 +203,20 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
     else scrollOnLeaving.current = null;
   }, [messages, loading]);
 
-  // Returning from the saved exchanges finds the conversation where it was.
+  // Returning from the saved exchanges, or from changing the profile, finds
+  // the conversation where it was.
   useLayoutEffect(() => {
-    if (showingSaved) return;
+    if (awayFromChat) return;
     if (scrollOnLeaving.current === null) bottomRef.current?.scrollIntoView();
     else if (mainRef.current) mainRef.current.scrollTop = scrollOnLeaving.current;
     scrollOnLeaving.current = null;
-  }, [showingSaved]);
+  }, [awayFromChat]);
+
+  useEffect(() => {
+    if (changingProfile || !closedProfile.current) return;
+    closedProfile.current = false;
+    profileButtonRef.current?.focus();
+  }, [changingProfile]);
 
   // iOS Safari doesn't resize the layout when the keyboard opens; it scrolls
   // the page instead. Pin the chat to the visible area so the header stays
@@ -419,6 +434,26 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
     startSession();
   }
 
+  // The change applies from the next request; one already sent finishes as
+  // it began.
+  function saveProfile(changed: LearnerProfile) {
+    storeLearnerProfile(changed);
+    profileRef.current = changed;
+    setChosenProfile(changed);
+    closeProfile();
+  }
+
+  function openProfile() {
+    if (!awayFromChat) scrollOnLeaving.current = mainRef.current?.scrollTop ?? null;
+    setShowingSaved(false);
+    setChangingProfile(true);
+  }
+
+  function closeProfile() {
+    closedProfile.current = true;
+    setChangingProfile(false);
+  }
+
   function startSession() {
     // Drop the greeting left behind by a failed attempt.
     setMessages([]);
@@ -513,7 +548,7 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
               <Icon path={MUTE_ICON} />
             </button>
           )}
-          {visibleMessages.length > 0 && !showingSaved && (
+          {visibleMessages.length > 0 && !awayFromChat && (
             <button
               onClick={() => {
                 setMessages([]);
@@ -533,10 +568,23 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
               <Icon path={NEW_CONVERSATION_ICON} />
             </button>
           )}
+          {unlocked && profile && (
+            <button
+              ref={profileButtonRef}
+              onClick={() => (changingProfile ? closeProfile() : openProfile())}
+              aria-label={`Perfil d'aprenent, nivell ${profile.level}`}
+              aria-expanded={changingProfile}
+              title="Perfil d'aprenent"
+              className="min-h-7 min-w-7 p-0.5 text-sm font-medium text-muted hover:text-foreground"
+            >
+              {profile.level}
+            </button>
+          )}
           {unlocked && (
             <button
               onClick={() => {
-                if (!showingSaved) scrollOnLeaving.current = mainRef.current?.scrollTop ?? null;
+                setChangingProfile(false);
+                if (!awayFromChat) scrollOnLeaving.current = mainRef.current?.scrollTop ?? null;
                 setSavedListen((listen) => (listen?.status === "failed" ? null : listen));
                 setShowingSaved(!showingSaved);
               }}
@@ -550,7 +598,11 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
         </div>
       </header>
 
-      {showingSaved ? (
+      {changingProfile && profile ? (
+        <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-6">
+          <Onboarding profile={profile} onFinish={saveProfile} onClose={closeProfile} />
+        </main>
+      ) : showingSaved ? (
         <SavedExchanges
           exchanges={saved}
           speechAvailable={speechAvailable}
@@ -710,8 +762,8 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
       <form
         onSubmit={handleSubmit}
         aria-labelledby={inputLabelId}
-        hidden={showingSaved}
-        className={`${showingSaved ? "hidden" : "flex"} shrink-0 gap-2 border-t border-rule pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]`}
+        hidden={awayFromChat}
+        className={`${awayFromChat ? "hidden" : "flex"} shrink-0 gap-2 border-t border-rule pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]`}
       >
         {/* The placeholder and the Envia button say what the field is for to
             the eye; the label says it to a screen reader. */}

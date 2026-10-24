@@ -287,6 +287,8 @@ Every request to `/api/chat` carries the profile as two codes beside the message
 
 Replies stay in Catalan at every tier. A profile that is missing or not one of the codes gets the prompt for no profile, `SYSTEM_PROMPT`. A translation ignores the profile. The `reply_tokens` log line names the tier, or `null` when there was none.
 
+Once there is a profile, the header shows its level, such as **B1**. Tapping it asks the two questions again in place of the conversation, with the current answers chosen; saving applies the change from the next message and keeps the conversation, and **Tanca** or Escape closes them with nothing changed. A reply being written when the profile changes finishes as it began.
+
 The profile is kept in the browser's `localStorage` under `learner-profile`, with the same limits as saved exchanges: one browser on one device, gone when the site's data is cleared. If the browser won't store it, the session starts anyway, and the user is asked again on their next visit. All reading and writing of it is in `src/lib/learner-profile.ts`.
 
 ## Secret phrase
