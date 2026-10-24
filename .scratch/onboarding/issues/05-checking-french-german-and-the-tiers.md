@@ -4,10 +4,10 @@
 
 **Blocked by:** 01 — Replies pitched at the learner profile.
 
-**Status:** ready-for-agent
+**Status:** in review: results in `docs/comparison/tiers/README.md`; the owner to decide on French and German and on rewording the tiers
 
-- [ ] The comparison messages in `docs/comparison/` are replayed against the deployed **model host** with a profile in each tier, and with A1 profiles in French, German and English. The replay script takes a profile to do so.
-- [ ] The replies are saved in `docs/comparison/`, with a short note of what was found.
+- [x] The comparison messages in `docs/comparison/` are replayed against the deployed **model host** with a profile in each tier, and with A1 profiles in French, German and English. The replay script takes a profile to do so.
+- [x] The replies are saved in `docs/comparison/`, with a short note of what was found.
 - [ ] Replies at A1–A2, B1–B2 and C1–C2 differ in length and difficulty as the spec intends. If they don't, the tiers' wording is adjusted and replayed.
 - [ ] At A1, French and German explanations are correct and stay in that language. Any language whose explanations don't hold up is removed from the list, with the reason in the note.
 - [ ] The owner has read the results and agreed to what stays.
