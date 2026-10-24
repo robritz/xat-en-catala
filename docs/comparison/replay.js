@@ -8,9 +8,13 @@ import { readFile } from "node:fs/promises";
 const [host] = process.argv.slice(2);
 const appUrl = (process.env.APP_URL || "http://localhost:3000").replace(/\/+$/, "");
 const phrase = process.env.CHAT_SECRET_PHRASE;
-if (!host || !phrase) {
+// A learner profile to send with each message, as "<native language>:<level>",
+// such as "fr:A1". Without one, the messages are sent as by a user with none.
+const profile = process.env.PROFILE?.match(/^([a-z]{2}):([ABC][12])$/);
+if (!host || !phrase || (process.env.PROFILE && !profile)) {
   console.error('Usage: node --env-file=.env.local docs/comparison/replay.js "<name of the model host>"');
   console.error("CHAT_SECRET_PHRASE must be set. APP_URL defaults to http://localhost:3000.");
+  console.error('PROFILE, if set, is "<native language>:<level>", such as "fr:A1".');
   process.exit(1);
 }
 
@@ -29,6 +33,7 @@ async function send({ message, as }) {
     method: "POST",
     headers: { cookie },
     body: JSON.stringify({
+      ...(profile && { profile: { nativeLanguage: profile[1], level: profile[2] } }),
       messages: [
         {
           id: "1",
@@ -55,13 +60,17 @@ async function send({ message, as }) {
 
 const quoted = (text) => text.split("\n").map((line) => `> ${line}`.trimEnd()).join("\n");
 
-const messages = JSON.parse(await readFile(new URL("messages.json", import.meta.url), "utf8"));
+// A translation ignores the profile, so only chat is sent with one.
+const messages = JSON.parse(await readFile(new URL("messages.json", import.meta.url), "utf8")).filter(
+  (entry) => !profile || entry.as === "chat",
+);
 
 // Nothing is printed until every reply is in, so a run that fails part of the
 // way leaves no half-written file behind.
 const sections = [
-  `# Replies from ${host}`,
-  `Taken on ${new Date().toISOString().slice(0, 10)} from the model host "${host}".`,
+  profile ? `# Replies from ${host} at ${profile[2]} in ${profile[1]}` : `# Replies from ${host}`,
+  `Taken on ${new Date().toISOString().slice(0, 10)} from the model host "${host}"` +
+    (profile ? `, with the learner profile ${profile[1]}, ${profile[2]}.` : "."),
 ];
 for (const entry of messages) {
   const { text, usage } = await send(entry);
