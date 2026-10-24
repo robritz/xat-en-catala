@@ -684,11 +684,12 @@ describe("changing the learner profile", () => {
     });
   }
 
-  test("shows the level in the header once a profile is held", () => {
+  test("shows a language icon in the header once a profile is held, named with the level", () => {
     render(<Chat initiallyUnlocked />);
 
     const button = profileButton("B1");
-    expect(button.textContent).toBe("B1");
+    expect(button.textContent).toBe("");
+    expect(button.querySelector("svg")).not.toBeNull();
   });
 
   test("isn't shown while locked, or before there is a profile", () => {
