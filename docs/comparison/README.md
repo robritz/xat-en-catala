@@ -8,6 +8,7 @@ A fixed set of messages for telling whether one **model host** answers as well a
 | `replay.js` | Sends the set to a running copy of the app and prints the replies as Markdown |
 | `baseline-runpod.md` | RunPod's replies, taken on 2026-10-12 with the app sending a temperature of 1 and a top-p of 1 |
 | `replies-cloud-run.md` | Cloud Run's replies, taken on 2026-10-13 from the first run against it, to be read beside the baseline |
+| `tiers/` | Cloud Run's replies to the chat messages with a learner profile at each tier, and in French and German, taken on 2026-10-24, with what was found |
 
 ## Replaying the set against a host
 
@@ -19,7 +20,7 @@ A fixed set of messages for telling whether one **model host** answers as well a
    node --env-file=.env.local docs/comparison/replay.js "Cloud Run" > docs/comparison/replies-cloud-run.md
    ```
 
-The script unlocks the app with `CHAT_SECRET_PHRASE` and sends each message on its own through `/api/chat`, so a message takes the same path as one a learner enters: the same prompts, stop sequences and sampling values. Set `APP_URL` to replay against a copy of the app that is not at `http://localhost:3000`.
+The script unlocks the app with `CHAT_SECRET_PHRASE` and sends each message on its own through `/api/chat`, so a message takes the same path as one a learner enters: the same prompts, stop sequences and sampling values. Set `APP_URL` to replay against a copy of the app that is not at `http://localhost:3000`. Set `PROFILE` to send a learner profile with each message, as `"<native language>:<level>"` such as `fr:A1`; only the chat messages are sent then, since a translation ignores the profile.
 
 ## Reading the replies
 
