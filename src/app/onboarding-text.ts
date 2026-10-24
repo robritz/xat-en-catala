@@ -4,13 +4,21 @@ import type { Level, NativeLanguage } from "@/lib/learner-profile";
 // one part of the interface that is translated: a user who reads no Catalan
 // has to be able to judge their level. Each level is described in a line drawn
 // from the Council of Europe's CEFR self-assessment grid, in the first person.
-type LevelStepText = { question: string; back: string; start: string; levels: Record<Level, string> };
+// `start` finishes onboarding; `save` finishes changing a profile.
+type LevelStepText = {
+  question: string;
+  back: string;
+  start: string;
+  save: string;
+  levels: Record<Level, string>;
+};
 
 export const LEVEL_STEP_TEXT: Record<NativeLanguage, LevelStepText> = {
   en: {
     question: "What is your level of Catalan?",
     back: "Back",
     start: "Start",
+    save: "Save",
     levels: {
       A1: "I can use a few words and simple phrases.",
       A2: "I can handle simple, everyday exchanges.",
@@ -24,6 +32,7 @@ export const LEVEL_STEP_TEXT: Record<NativeLanguage, LevelStepText> = {
     question: "¿Cuál es tu nivel de catalán?",
     back: "Atrás",
     start: "Empezar",
+    save: "Guardar",
     levels: {
       A1: "Sé usar algunas palabras y frases sencillas.",
       A2: "Me desenvuelvo en intercambios sencillos y cotidianos.",
@@ -37,6 +46,7 @@ export const LEVEL_STEP_TEXT: Record<NativeLanguage, LevelStepText> = {
     question: "Zer maila duzu katalanez?",
     back: "Atzera",
     start: "Hasi",
+    save: "Gorde",
     levels: {
       A1: "Hitz eta esaldi erraz batzuk erabiltzen ditut.",
       A2: "Eguneroko elkarrizketa errazetan moldatzen naiz.",
@@ -50,6 +60,7 @@ export const LEVEL_STEP_TEXT: Record<NativeLanguage, LevelStepText> = {
     question: "Cal é o teu nivel de catalán?",
     back: "Atrás",
     start: "Comezar",
+    save: "Gardar",
     levels: {
       A1: "Sei usar algunhas palabras e frases sinxelas.",
       A2: "Desenvólvome en intercambios sinxelos e cotiáns.",
@@ -64,6 +75,7 @@ export const LEVEL_STEP_TEXT: Record<NativeLanguage, LevelStepText> = {
     question: "Quel est ton niveau de catalan ?",
     back: "Retour",
     start: "Commencer",
+    save: "Enregistrer",
     levels: {
       A1: "Je sais utiliser quelques mots et phrases simples.",
       A2: "Je me débrouille dans des échanges simples du quotidien.",
@@ -77,6 +89,7 @@ export const LEVEL_STEP_TEXT: Record<NativeLanguage, LevelStepText> = {
     question: "Wie gut ist dein Katalanisch?",
     back: "Zurück",
     start: "Starten",
+    save: "Speichern",
     levels: {
       A1: "Ich kann ein paar Wörter und einfache Sätze verwenden.",
       A2: "Ich kann mich in einfachen, alltäglichen Gesprächen verständigen.",

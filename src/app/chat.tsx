@@ -95,6 +95,9 @@ const OPTIONS_ICON =
   "M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z";
 const NEW_CONVERSATION_ICON =
   "M22 4c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14l4 4V4zm-5 7h-4v4h-2v-4H7V9h4V5h2v4h4v2z";
+// A globe: the learner profile is chiefly the language the user reads best.
+const LANGUAGE_ICON =
+  "M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm6.93 6h-2.95c-.32-1.25-.78-2.45-1.38-3.56 1.84.63 3.37 1.91 4.33 3.56zM12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96zM4.26 14C4.1 13.36 4 12.69 4 12s.1-1.36.26-2h3.38c-.08.66-.14 1.32-.14 2 0 .68.06 1.34.14 2H4.26zm.82 2h2.95c.32 1.25.78 2.45 1.38 3.56-1.84-.63-3.37-1.9-4.33-3.56zm2.95-8H5.08c.96-1.66 2.49-2.93 4.33-3.56C8.81 5.55 8.35 6.75 8.03 8zM12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96zM14.34 14H9.66c-.09-.66-.16-1.32-.16-2 0-.68.07-1.35.16-2h4.68c.09.65.16 1.32.16 2 0 .68-.07 1.34-.16 2zm.25 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95c-.96 1.65-2.49 2.93-4.33 3.56zM16.36 14c.08-.66.14-1.32.14-2 0-.68-.06-1.34-.14-2h3.38c.16.64.26 1.31.26 2s-.1 1.36-.26 2h-3.38z";
 const SAVED_ICON =
   "M19 18l2 1V3c0-1.1-.9-2-2-2H8.99C7.89 1 7 1.9 7 3h10c1.1 0 2 .9 2 2v13zM15 5H5c-1.1 0-2 .9-2 2v16l7-3 7 3V7c0-1.1-.9-2-2-2z";
 
@@ -184,6 +187,14 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
   const saved = useSavedExchanges();
   // While on, the saved exchanges are shown in place of the conversation.
   const [showingSaved, setShowingSaved] = useState(false);
+  // While on, the questions that change the learner profile are shown in
+  // place of the conversation.
+  const [changingProfile, setChangingProfile] = useState(false);
+  const awayFromChat = showingSaved || changingProfile;
+  const profileButtonRef = useRef<HTMLButtonElement>(null);
+  // Set when the questions close, so that the focus goes back to the button
+  // that opened them.
+  const closedProfile = useRef(false);
   // How far the conversation was scrolled when the saved exchanges took its
   // place, for as long as nothing more has arrived in it.
   const mainRef = useRef<HTMLElement>(null);
@@ -195,13 +206,20 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
     else scrollOnLeaving.current = null;
   }, [messages, loading]);
 
-  // Returning from the saved exchanges finds the conversation where it was.
+  // Returning from the saved exchanges, or from changing the profile, finds
+  // the conversation where it was.
   useLayoutEffect(() => {
-    if (showingSaved) return;
+    if (awayFromChat) return;
     if (scrollOnLeaving.current === null) bottomRef.current?.scrollIntoView();
     else if (mainRef.current) mainRef.current.scrollTop = scrollOnLeaving.current;
     scrollOnLeaving.current = null;
-  }, [showingSaved]);
+  }, [awayFromChat]);
+
+  useEffect(() => {
+    if (changingProfile || !closedProfile.current) return;
+    closedProfile.current = false;
+    profileButtonRef.current?.focus();
+  }, [changingProfile]);
 
   // iOS Safari doesn't resize the layout when the keyboard opens; it scrolls
   // the page instead. Pin the chat to the visible area so the header stays
@@ -419,6 +437,26 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
     startSession();
   }
 
+  // The change applies from the next request; one already sent finishes as
+  // it began.
+  function saveProfile(changed: LearnerProfile) {
+    storeLearnerProfile(changed);
+    profileRef.current = changed;
+    setChosenProfile(changed);
+    closeProfile();
+  }
+
+  function openProfile() {
+    if (!awayFromChat) scrollOnLeaving.current = mainRef.current?.scrollTop ?? null;
+    setShowingSaved(false);
+    setChangingProfile(true);
+  }
+
+  function closeProfile() {
+    closedProfile.current = true;
+    setChangingProfile(false);
+  }
+
   function startSession() {
     // Drop the greeting left behind by a failed attempt.
     setMessages([]);
@@ -513,7 +551,7 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
               <Icon path={MUTE_ICON} />
             </button>
           )}
-          {visibleMessages.length > 0 && !showingSaved && (
+          {visibleMessages.length > 0 && !awayFromChat && (
             <button
               onClick={() => {
                 setMessages([]);
@@ -533,10 +571,23 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
               <Icon path={NEW_CONVERSATION_ICON} />
             </button>
           )}
+          {unlocked && profile && (
+            <button
+              ref={profileButtonRef}
+              onClick={() => (changingProfile ? closeProfile() : openProfile())}
+              aria-label={`Perfil d'aprenent, nivell ${profile.level}`}
+              aria-expanded={changingProfile}
+              title="Perfil d'aprenent"
+              className="p-0.5 text-muted hover:text-foreground"
+            >
+              <Icon path={LANGUAGE_ICON} />
+            </button>
+          )}
           {unlocked && (
             <button
               onClick={() => {
-                if (!showingSaved) scrollOnLeaving.current = mainRef.current?.scrollTop ?? null;
+                setChangingProfile(false);
+                if (!awayFromChat) scrollOnLeaving.current = mainRef.current?.scrollTop ?? null;
                 setSavedListen((listen) => (listen?.status === "failed" ? null : listen));
                 setShowingSaved(!showingSaved);
               }}
@@ -550,7 +601,11 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
         </div>
       </header>
 
-      {showingSaved ? (
+      {changingProfile && profile ? (
+        <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-6">
+          <Onboarding profile={profile} onFinish={saveProfile} onClose={closeProfile} />
+        </main>
+      ) : showingSaved ? (
         <SavedExchanges
           exchanges={saved}
           speechAvailable={speechAvailable}
@@ -710,8 +765,8 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
       <form
         onSubmit={handleSubmit}
         aria-labelledby={inputLabelId}
-        hidden={showingSaved}
-        className={`${showingSaved ? "hidden" : "flex"} shrink-0 gap-2 border-t border-rule pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]`}
+        hidden={awayFromChat}
+        className={`${awayFromChat ? "hidden" : "flex"} shrink-0 gap-2 border-t border-rule pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]`}
       >
         {/* The placeholder and the Envia button say what the field is for to
             the eye; the label says it to a screen reader. */}

@@ -27,6 +27,11 @@ const OPTIONS_BUTTON = "Opcions de la resposta";
 const SAVE_FAILURE = "No s'ha pogut desar.";
 // Each named in Catalan and in English.
 const NATIVE_LANGUAGE_QUESTION = "Quina llengua llegeixes millor? Which language do you read best?";
+const CLOSE_BUTTON = "Tanca";
+function profileButton(level: string) {
+  return screen.getByRole("button", { name: `Perfil d'aprenent, nivell ${level}` });
+}
+
 // Once a native language is chosen, the level question is asked in it.
 const ASKED_IN = {
   English: {
@@ -54,6 +59,8 @@ const ASKED_IN = {
     a1: "A1 Sei usar algunhas palabras e frases sinxelas.",
   },
 } satisfies Record<string, { question: string; start: string; back: string; a1: string }>;
+// What saving a changed profile is called, in the language it is changed to.
+const SAVE_IN = { English: "Save", Español: "Guardar", Deutsch: "Speichern", Galego: "Gardar" };
 type AskedIn = keyof typeof ASKED_IN;
 const NOTHING_SAVED =
   "Encara no has desat res. Toca una resposta i després el marcador per desar-la.";
@@ -663,6 +670,168 @@ describe("a learner profile that can't be read or stored", () => {
 
     expect(screen.getByText("Hola!")).toBeDefined();
     expect(sentProfiles()).toEqual([{ nativeLanguage: "de", level: "A1" }]);
+  });
+});
+
+describe("changing the learner profile", () => {
+  // Changes the profile from the header and saves it.
+  async function changeProfile(from: string, nativeLanguage: keyof typeof SAVE_IN, level: string) {
+    fireEvent.click(profileButton(from));
+    fireEvent.click(screen.getByRole("button", { name: nativeLanguage }));
+    fireEvent.click(levelRadio(level));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: SAVE_IN[nativeLanguage] }));
+    });
+  }
+
+  test("shows a language icon in the header once a profile is held, named with the level", () => {
+    render(<Chat initiallyUnlocked />);
+
+    const button = profileButton("B1");
+    expect(button.textContent).toBe("");
+    expect(button.querySelector("svg")).not.toBeNull();
+  });
+
+  test("isn't shown while locked, or before there is a profile", () => {
+    const { unmount } = render(<Chat initiallyUnlocked={false} />);
+    expect(screen.queryByRole("button", { name: /Perfil d'aprenent/ })).toBeNull();
+    unmount();
+
+    localStorage.removeItem(PROFILE_KEY);
+    render(<Chat initiallyUnlocked />);
+    expect(screen.queryByRole("button", { name: /Perfil d'aprenent/ })).toBeNull();
+  });
+
+  test("asks the two questions again with the current answers chosen", async () => {
+    await renderStarted();
+
+    fireEvent.click(profileButton("B1"));
+
+    const english = screen.getByRole("button", { name: "English" });
+    expect(english.getAttribute("aria-pressed")).toBe("true");
+    expect(document.activeElement).toBe(english);
+    // Both are asked at once, so either can be changed alone.
+    expect((levelRadio("B1") as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByRole("button", { name: SAVE_IN.English })).toBeDefined();
+  });
+
+  test("changes the level alone, keeping the native language", async () => {
+    await renderStarted();
+    fireEvent.click(profileButton("B1"));
+
+    fireEvent.click(levelRadio("C2"));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: SAVE_IN.English }));
+    });
+    await send("Hello");
+
+    expect(profileButton("C2")).toBeDefined();
+    expect(sentProfiles().at(-1)).toEqual({ nativeLanguage: "en", level: "C2" });
+  });
+
+  test("asks the level in the native language chosen, keeping the level chosen", () => {
+    render(<Chat initiallyUnlocked />);
+    fireEvent.click(profileButton("B1"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Deutsch" }));
+
+    expect(screen.getByRole("button", { name: "Deutsch" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("radiogroup", { name: ASKED_IN.Deutsch.question })).toBeDefined();
+    expect((levelRadio("B1") as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByRole("button", { name: SAVE_IN.Deutsch })).toBeDefined();
+  });
+
+  test("stores a saved change and sends it from the next message, keeping the conversation", async () => {
+    await renderStarted();
+    await send("Hello");
+
+    await changeProfile("B1", "Español", "C1");
+
+    expect(document.activeElement).toBe(profileButton("C1"));
+    expect(JSON.parse(localStorage.getItem(PROFILE_KEY)!)).toEqual({
+      version: 1,
+      nativeLanguage: "es",
+      level: "C1",
+    });
+    expect(screen.getByText("Hello")).toBeDefined();
+    expect(screen.getByText("Bon dia!")).toBeDefined();
+
+    await send("Again");
+
+    expect(sentProfiles()).toEqual([
+      { nativeLanguage: "en", level: "B1" },
+      { nativeLanguage: "en", level: "B1" },
+      { nativeLanguage: "es", level: "C1" },
+    ]);
+    expect(sentConversations().at(-1)!.map((m: { content: string }) => m.content)).toEqual([
+      GREETING,
+      "Hola!",
+      "Hello",
+      "Bon dia!",
+      "Again",
+    ]);
+  });
+
+  test.each([
+    ["the close button", () => fireEvent.click(screen.getByRole("button", { name: CLOSE_BUTTON }))],
+    ["Escape", () => pressEscape(screen.getByRole("button", { name: "Deutsch" }))],
+  ])("changes nothing when closed with %s", async (_, close) => {
+    await renderStarted();
+    await send("Hello");
+    fireEvent.click(profileButton("B1"));
+
+    close();
+
+    expect(screen.queryByRole("group", { name: NATIVE_LANGUAGE_QUESTION })).toBeNull();
+    expect(screen.getByText("Bon dia!")).toBeDefined();
+    expect(document.activeElement).toBe(profileButton("B1"));
+    expect(JSON.parse(localStorage.getItem(PROFILE_KEY)!).level).toBe("B1");
+    await send("Again");
+    expect(sentProfiles().at(-1)).toEqual({ nativeLanguage: "en", level: "B1" });
+  });
+
+  test("closes from the level question too, leaving the profile as it was", async () => {
+    await renderStarted();
+    fireEvent.click(profileButton("B1"));
+    fireEvent.click(screen.getByRole("button", { name: "Deutsch" }));
+    fireEvent.click(levelRadio("A1"));
+
+    fireEvent.click(screen.getByRole("button", { name: CLOSE_BUTTON }));
+
+    expect(profileButton("B1")).toBeDefined();
+    expect(JSON.parse(localStorage.getItem(PROFILE_KEY)!).nativeLanguage).toBe("en");
+  });
+
+  test("lets a reply being written finish as it began", async () => {
+    await renderStarted();
+    const finish = coldStart();
+    await send("Hello");
+
+    await changeProfile("B1", "Galego", "A2");
+    await finish(reply("Bon dia!"));
+
+    expect(screen.getByText("Bon dia!")).toBeDefined();
+    expect(sentProfiles().at(-1)).toEqual({ nativeLanguage: "en", level: "B1" });
+    answer = reply("Adéu!");
+    await send("Bye");
+    expect(sentProfiles().at(-1)).toEqual({ nativeLanguage: "gl", level: "A2" });
+  });
+
+  test("keeps the profile through a new conversation", async () => {
+    await renderStarted();
+    await send("Hello");
+
+    fireEvent.click(screen.getByRole("button", { name: NEW_BUTTON }));
+    await send("Again");
+
+    expect(profileButton("B1")).toBeDefined();
+    expect(sentProfiles().at(-1)).toEqual({ nativeLanguage: "en", level: "B1" });
+  });
+
+  test("has no accessibility faults while open", async () => {
+    await renderStarted();
+    fireEvent.click(profileButton("B1"));
+    expect(await accessibilityFaults()).toEqual([]);
   });
 });
 
