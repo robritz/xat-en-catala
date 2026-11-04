@@ -45,3 +45,7 @@ next-env.d.ts
 .terraform/
 *.tfstate
 *.tfstate.*
+
+# mutation testing
+/reports/mutation/
+.stryker-tmp/
