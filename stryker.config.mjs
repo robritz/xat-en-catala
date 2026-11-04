@@ -4,7 +4,7 @@
 // the report is written to reports/mutation/mutation.html.
 
 /** @type {import('@stryker-mutator/api/core').PartialStrykerOptions} */
-export default {
+const config = {
   testRunner: "vitest",
   vitest: { configFile: "vitest.config.mts" },
   // Runs only the tests that reach the changed code, not every test.
@@ -17,3 +17,5 @@ export default {
   // Keeps the run's copies of the project inside the repository.
   tempDirName: ".stryker-tmp",
 };
+
+export default config;
