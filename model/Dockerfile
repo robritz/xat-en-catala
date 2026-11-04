@@ -21,6 +21,12 @@ FROM ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:20c6e722e2fcc5ca9c15401d3fd8e
 # afresh, the layer gets a new digest and a deploy moves 6.4 GB.
 COPY --from=weights /models /models
 
+# The server runs as nobody, not as root, so that whoever takes control of it
+# does not hold the container. It needs no more: the weights are readable by
+# all, and port 8080 needs no privilege. The user is given by number so that
+# the image does not depend on the base image's user list.
+USER 65534:65534
+
 # The image's entrypoint is the server, which already listens on port 8080 on
 # all addresses. It reads the API key from LLAMA_API_KEY, which Cloud Run sets
 # from Secret Manager, and uses the chat template embedded in the weights file
