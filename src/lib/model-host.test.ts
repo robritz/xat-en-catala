@@ -26,11 +26,15 @@ async function sentRequest() {
 }
 
 describe("chatModel", () => {
-  test("calls Salamandra's model host with its API key when no model is chosen", async () => {
+  test.each([
+    ["no model is chosen", ""],
+    ["Salamandra is chosen", "salamandra"],
+  ])("calls Salamandra's model host with its API key, name and sampling when %s", async (_, model) => {
+    vi.stubEnv("MODEL", model);
     const { url, headers, body } = await sentRequest();
     expect(url).toBe("https://model-host.example/v1/chat/completions");
     expect(headers.get("authorization")).toBe("Bearer test-key");
-    expect(body.model).toBe("BSC-LT/salamandra-7b-instruct-2606");
+    expect(body).toMatchObject({ model: "BSC-LT/salamandra-7b-instruct-2606", temperature: 1, top_p: 1 });
   });
 
   // BSC advises a temperature of 0 to 0.2 for ALIA.
@@ -70,11 +74,6 @@ describe("chatModel", () => {
   test("sends the temperature and top-p with a request", async () => {
     const { body } = await sentRequest();
     expect(body).toMatchObject({ temperature: 1, top_p: 1 });
-  });
-
-  test("calls Salamandra's model host when Salamandra is chosen", async () => {
-    vi.stubEnv("MODEL", "salamandra");
-    expect((await sentRequest()).url).toBe("https://model-host.example/v1/chat/completions");
   });
 
   // A typo must not quietly send every learner to another model.

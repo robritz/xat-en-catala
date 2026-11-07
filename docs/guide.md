@@ -31,7 +31,7 @@ Open http://localhost:3000.
 | `ALIA_HOST_URL`           | Base URL of ALIA's model host's OpenAI-compatible API. Needed when ALIA is chosen |
 | `ALIA_HOST_API_KEY`       | The key ALIA's model host checks. Needed when ALIA is chosen |
 | `CHAT_SECRET_PHRASE`      | Phrase users must type to unlock the chat (see below)           |
-| `TTS_API_URL`        | Optional. Base URL of the [Matxa-TTS API](https://github.com/robritz/matxa-tts-api) that speaks replies (see below). Defaults to `http://localhost:8000` |
+| `TTS_API_URL`             | Optional. Base URL of the [Matxa-TTS API](https://github.com/robritz/matxa-tts-api) that speaks replies (see below). Defaults to `http://localhost:8000` |
 
 All are read only on the server, so the API key never reaches the browser. Switching models, or pointing a model at another host, is a change of these variables alone. `.env.local` is git-ignored.
 

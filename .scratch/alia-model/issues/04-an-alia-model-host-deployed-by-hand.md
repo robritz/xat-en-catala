@@ -11,7 +11,7 @@ See `docs/specs/alia-model.md`, sections "Weights and GPU", "Images", "The servi
 **Status:** ready-for-agent
 
 - [ ] ALIA's Dockerfile starts from the same pinned engine image as Salamandra's, copies the weights from ALIA's weights image into a layer of their own, runs as an unprivileged user, and passes Salamandra's flags with ALIA's weights file and served name.
-- [ ] The served name is the one ticket 01 requests ALIA under.
+- [ ] The server's `--alias` is `BSC-LT/ALIA-40b-instruct-2601`, the name ticket 01 requests ALIA under. A different alias means every request to ALIA fails.
 - [ ] The pull-request lint covers ALIA's Dockerfile.
 - [ ] ALIA's service image build reuses the previous image as a cache, with a disk and timeout large enough for its weights, so that a build changing only a flag keeps the weights layer's digest.
 - [ ] Applied with ALIA's settings and its own state, the service configuration makes `model-host-alia`: one RTX PRO 6000, 20 CPUs, 80 GiB, zero to one instance, four requests at once, zonal redundancy off, a startup probe on the health route that allows for ALIA's load time, and ALIA's key from its secret. Salamandra's service is untouched.

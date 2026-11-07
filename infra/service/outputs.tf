@@ -1,5 +1,5 @@
 output "url" {
-  description = "The service's URL. The app's SALAMANDRA_HOST_URL is this followed by /v1."
+  description = "The service's URL. The app's host URL for the model is this followed by /v1."
   value       = google_cloud_run_v2_service.model_host.uri
 }
 
