@@ -1,0 +1,50 @@
+# Builds ALIA's weights image: the quantised weights file and nothing else.
+# ALIA's service image will copy the file from it, so a routine deploy never
+# moves the weights.
+#
+# Run by hand, once, and again only when the weights change, as docs/guide.md
+# shows. It needs no source: the file comes from the bucket that
+# model/alia/mirror-weights.sh mirrors it into, never from Hugging Face.
+
+substitutions:
+  _REPOSITORY: model-host
+  _QUANTISATION: Q8_0
+  _REVISION: 257ea58cdc8ff825634b36d1d2bfe052d4ac20f9
+  _FILE: ALIA-40b-instruct-2601-Q8_0.gguf
+
+steps:
+  - id: fetch the weights from the bucket
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - storage
+      - cp
+      - gs://${PROJECT_ID}-model-weights/${_REVISION}/${_FILE}
+      - /workspace/weights/${_FILE}
+
+  # The build context is the directory holding the one file, and the image
+  # starts from nothing, so the file is all it holds.
+  - id: build the weights image
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        printf 'FROM scratch\nCOPY ${_FILE} /models/${_FILE}\n' |
+          docker build --file - \
+            --tag '${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/alia-weights:${_QUANTISATION}-${_REVISION}' \
+            /workspace/weights
+
+images:
+  - ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/alia-weights:${_QUANTISATION}-${_REVISION}
+
+# Fetching, building and pushing 43 GB takes far longer than Salamandra's
+# 6.4 GB.
+timeout: 7200s
+
+options:
+  # The file is held three times over: as fetched, in the build context Docker
+  # is sent, and as the image's layer. Cloud Build's default disk holds 100 GB.
+  diskSizeGb: 200
+  # A build that runs as its own service account has to say where its logs go.
+  logging: CLOUD_LOGGING_ONLY

@@ -54,10 +54,25 @@ resource "google_storage_bucket" "state" {
   depends_on = [google_project_service.apis]
 }
 
-# The secret only. Its value, the key, is added with gcloud as docs/guide.md
-# shows, so that it is never held in Terraform's state.
+# The secrets only, one for each model host's key. Their values, the keys,
+# are added with gcloud as docs/guide.md shows, so that they are never held in
+# Terraform's state. Salamandra's keeps the name it had as the only one.
 resource "google_secret_manager_secret" "api_key" {
   secret_id = "model-host-api-key"
+
+  replication {
+    user_managed {
+      replicas {
+        location = var.region
+      }
+    }
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_secret_manager_secret" "alia_api_key" {
+  secret_id = "model-host-alia-api-key"
 
   replication {
     user_managed {
