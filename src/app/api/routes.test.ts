@@ -75,6 +75,9 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(isUnlocked).mockResolvedValue(true);
   vi.spyOn(console, "error").mockImplementation(() => {});
+  // The chat route logs the tokens of every reply. Tests of that line spy on
+  // it themselves.
+  vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
 describe("POST /api/chat", () => {

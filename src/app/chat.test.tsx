@@ -397,6 +397,13 @@ function translateToggle() {
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  // The chat logs a reply that failed, which many tests cause on purpose, so
+  // a logged error is kept quiet. Anything else, such as a warning from React,
+  // which comes as a string, still shows.
+  const logError = console.error;
+  vi.spyOn(console, "error").mockImplementation((first, ...rest) => {
+    if (!(first instanceof Error)) logError(first, ...rest);
+  });
   localStorage.clear();
   // A returning user, unless a test says otherwise.
   localStorage.setItem(PROFILE_KEY, storedProfile("en", "B1"));
@@ -2884,7 +2891,6 @@ describe("a reply that can't be had", () => {
   });
 
   test("says in Catalan that the model couldn't reply, never what the server said", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
     await renderStarted();
     answer = failure("Upstream error");
 
