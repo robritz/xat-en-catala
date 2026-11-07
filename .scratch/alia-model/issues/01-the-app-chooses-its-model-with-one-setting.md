@@ -10,11 +10,20 @@ See `docs/specs/alia-model.md`, section "The app", and the testing decisions for
 
 **Status:** ready-for-agent
 
-- [ ] `MODEL` chooses the model: `salamandra`, `alia`, or unset for Salamandra. Any other value is an error at the first request that names the value and the allowed ones.
-- [ ] `SALAMANDRA_HOST_URL`, `SALAMANDRA_HOST_API_KEY`, `ALIA_HOST_URL` and `ALIA_HOST_API_KEY` replace `MODEL_HOST_URL` and `MODEL_HOST_API_KEY`. Only the chosen model's two are required, and the error for a missing one names it.
-- [ ] `MODEL_NAME` is removed. Salamandra is requested as `BSC-LT/salamandra-7b-instruct-2606`, as today, and ALIA under the name its host will serve it as.
-- [ ] Salamandra is sent a temperature of 1 and a top-p of 1, as today. ALIA is sent a temperature of 0.1 and a top-p of 1. Neither is sent a repetition penalty.
-- [ ] The chat route's use of the model module is unchanged, and so are the prompts, the translation prompt and the stop sequences.
-- [ ] The model module's tests, through the request that reaches the model host, cover: Salamandra when unset; each model's address, key, served name, temperature and top-p when chosen; the unknown-value error; and the missing-variable error.
-- [ ] The example environment file and the guide describe the setting and the four variables.
-- [ ] With `MODEL` unset and Salamandra's variables set, a reply streams from Salamandra's live host in Catalan with its token counts.
+- [x] `MODEL` chooses the model: `salamandra`, `alia`, or unset for Salamandra. Any other value is an error at the first request that names the value and the allowed ones.
+- [x] `SALAMANDRA_HOST_URL`, `SALAMANDRA_HOST_API_KEY`, `ALIA_HOST_URL` and `ALIA_HOST_API_KEY` replace `MODEL_HOST_URL` and `MODEL_HOST_API_KEY`. Only the chosen model's two are required, and the error for a missing one names it.
+- [x] `MODEL_NAME` is removed. Salamandra is requested as `BSC-LT/salamandra-7b-instruct-2606`, as today, and ALIA under the name its host will serve it as.
+- [x] Salamandra is sent a temperature of 1 and a top-p of 1, as today. ALIA is sent a temperature of 0.1 and a top-p of 1. Neither is sent a repetition penalty.
+- [x] The chat route's use of the model module is unchanged, and so are the prompts, the translation prompt and the stop sequences.
+- [x] The model module's tests, through the request that reaches the model host, cover: Salamandra when unset; each model's address, key, served name, temperature and top-p when chosen; the unknown-value error; and the missing-variable error.
+- [x] The example environment file and the guide describe the setting and the four variables.
+- [x] With `MODEL` unset and Salamandra's variables set, a reply streams from Salamandra's live host in Catalan with its token counts.
+
+## Outcome
+
+Merged in #56 (`acf8d6f`) on 2026-11-07, with review fixes in `61248dc`.
+
+- The owner set `SALAMANDRA_HOST_URL` and `SALAMANDRA_HOST_API_KEY` locally and on Vercel before the merge. `MODEL_NAME` was set nowhere, so nothing had to be removed.
+- The owner confirmed afterwards that the deployed chat replies from Salamandra with `MODEL` unset.
+- The model module's tests check the request that reaches the model host for both models, the unknown-value error and the missing-variable errors.
+- ALIA is requested as `BSC-LT/ALIA-40b-instruct-2601`. Ticket 04 holds its server's `--alias` to that name.
