@@ -69,10 +69,10 @@ The commands below need `gcloud`, signed in as someone who can create these reso
 
 - a Docker repository in Artifact Registry, `model-host`;
 - a bucket for the weights, `<project>-model-weights`, and one for the Terraform state, `<project>-tfstate`, private and in the same region;
-- a service account for the service, `model-host`, which can read the API key and nothing else;
+- a service account for the model hosts, `model-host`, which can read their API keys and nothing else;
 - a service account for the build pipeline, `model-host-build`, which can push images to the repository, read the weights bucket, fetch this repository from GitHub and write build logs;
 - a service account for the deploy pipeline, `model-host-deploy`, which can read images, deploy to Cloud Run as the service's account, keep the Terraform state, read the API key, fetch this repository from GitHub and write build logs;
-- a secret in Secret Manager, `model-host-api-key`, for the server's API key;
+- a secret in Secret Manager for each model host's API key: `model-host-api-key` for Salamandra's and `model-host-alia-api-key` for ALIA's;
 - a connection to GitHub through Developer Connect, `github`, a link to this repository through it, and the two triggers, `model-host-build` and `model-host-deploy`.
 
 It is applied by hand:
@@ -94,14 +94,16 @@ terraform -chdir=infra/platform apply
 
 The connection to GitHub has to be approved in the browser once. On a project where it is new, the apply fails at the repository link: open the link in the output `github_approval_uri`, sign in to GitHub as the owner of the repository, authorise Developer Connect, and give its GitHub app access to the repository under "Repository access". Then apply again.
 
-Terraform holds the secret but not the key, so that the key is never in its state. On a project where the secret is new, add a key once, from the generator straight to Secret Manager, never shown:
+Terraform holds the secrets but not the keys, so that no key is ever in its state. Where a secret is new, add a key once, from the generator straight to Secret Manager, never shown:
 
 ```bash
 openssl rand -hex 32 | tr -d '\n' |
   gcloud secrets versions add model-host-api-key --project <project> --data-file -
+openssl rand -hex 32 | tr -d '\n' |
+  gcloud secrets versions add model-host-alia-api-key --project <project> --data-file -
 ```
 
-To read it, for the app's `SALAMANDRA_HOST_API_KEY`, run `gcloud secrets versions access latest --secret model-host-api-key`.
+To read one, for the app's `SALAMANDRA_HOST_API_KEY` or `ALIA_HOST_API_KEY`, run `gcloud secrets versions access latest --secret model-host-api-key`, or `--secret model-host-alia-api-key`.
 
 ### The weights
 
@@ -121,6 +123,18 @@ gcloud builds submit --no-source \
 ```
 
 Its tag names the quantisation and the revision it holds, as in `weights:Q6_K-8bcd7d8d8545749ef73b3046f7cb5cd64d8c70c1`. To change the weights, change the file, revision and checksum at the top of `model/salamandra/mirror-weights.sh` and the same file and revision in `model/salamandra/cloudbuild-weights.yaml`, then run both again. The service image names them too: the weights image's tag as `WEIGHTS_TAG` in `model/salamandra/Dockerfile`, and the file in its `CMD`.
+
+ALIA's weights are BSC's own Q8_0 conversion, 42.97 GB, from [`BSC-LT/ALIA-40b-instruct-2601-GGUF`](https://huggingface.co/BSC-LT/ALIA-40b-instruct-2601-GGUF) at a pinned revision. `model/alia/mirror-weights.sh` mirrors them, but streams the file into the bucket rather than downloading it first, so it needs no room for it: the SHA-256 is worked out on the way, and the file is moved from a staging name to its own only if it matches, or deleted. Its weights image is built the same way as Salamandra's, with a larger disk and a longer timeout, and is tagged as in `alia-weights:Q8_0-257ea58cdc8ff825634b36d1d2bfe052d4ac20f9`:
+
+```bash
+model/alia/mirror-weights.sh
+gcloud builds submit --no-source \
+  --project <project> --region europe-west4 \
+  --config model/alia/cloudbuild-weights.yaml \
+  --service-account projects/<project>/serviceAccounts/model-host-build@<project>.iam.gserviceaccount.com
+```
+
+ALIA runs on an NVIDIA RTX PRO 6000. Cloud Run grants a project 3,000 milli GPU of it without zonal redundancy, three GPUs, when its first service with one is deployed in a region, so no quota is requested by hand. A deploy needs two for a moment: one for the new revision and one for the old. More is requested on the console's Quotas page, for `run.googleapis.com/nvidia_rtx_pro_6000_gpu_allocation_no_zonal_redundancy` in `europe-west4`, once it has been granted.
 
 ### The service image
 
@@ -323,6 +337,8 @@ This is a light gate to keep casual visitors out, not real authentication. Anyon
 | `model/salamandra/Dockerfile`       | Salamandra's service image: llama.cpp's server, the weights and the server's flags |
 | `model/salamandra/cloudbuild-weights.yaml` | Builds Salamandra's weights image from the mirrored file. Run by hand |
 | `model/salamandra/mirror-weights.sh` | Mirrors Salamandra's weights from Hugging Face into the project |
+| `model/alia/cloudbuild-weights.yaml` | Builds ALIA's weights image from the mirrored file. Run by hand |
+| `model/alia/mirror-weights.sh`      | Streams ALIA's weights from Hugging Face into the project, checking them on the way |
 | `model/cloudbuild.yaml`             | The build pipeline a merge runs for a model: builds its service image and pushes it |
 | `model/image-tag.sh`                | Prints a model's service image tag, from its Dockerfile's checksum, for both pipelines |
 | `infra/platform/`                   | Terraform for the cloud resources the model hosts are assembled from, and each model's triggers. Applied by hand |

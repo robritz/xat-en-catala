@@ -31,9 +31,15 @@ locals {
   ]
 }
 
-# The service reads the key, and nothing else.
+# The model hosts read their keys, and nothing else.
 resource "google_secret_manager_secret_iam_member" "service_reads_key" {
   secret_id = google_secret_manager_secret.api_key.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = google_service_account.service.member
+}
+
+resource "google_secret_manager_secret_iam_member" "service_reads_alia_key" {
+  secret_id = google_secret_manager_secret.alia_api_key.id
   role      = "roles/secretmanager.secretAccessor"
   member    = google_service_account.service.member
 }

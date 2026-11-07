@@ -117,3 +117,19 @@ run "the_secret_is_the_one_the_service_reads" {
     error_message = "The secret should be the one the service reads."
   }
 }
+
+# ALIA's host checks a key of its own, so that a leaked key reaches one host
+# and not both.
+run "alia_has_its_own_key" {
+  # Applied against the mocked provider, so that the account's member is known.
+  command = apply
+
+  assert {
+    condition     = google_secret_manager_secret.alia_api_key.secret_id == "model-host-alia-api-key"
+    error_message = "ALIA's key should have a secret of its own."
+  }
+  assert {
+    condition     = google_secret_manager_secret_iam_member.service_reads_alia_key.role == "roles/secretmanager.secretAccessor" && google_secret_manager_secret_iam_member.service_reads_alia_key.member == google_service_account.service.member
+    error_message = "The model hosts' service account should read ALIA's key."
+  }
+}
