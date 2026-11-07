@@ -44,7 +44,8 @@ timeout: 7200s
 
 options:
   # The file is held three times over: as fetched, in the build context Docker
-  # is sent, and as the image's layer. Cloud Build's default disk holds 100 GB.
-  diskSizeGb: 200
+  # is sent, and as the image's layer: 129 GB. The worker's own files take
+  # 63 GB of the disk, so 200 GB ran out at the layer.
+  diskSizeGb: 300
   # A build that runs as its own service account has to say where its logs go.
   logging: CLOUD_LOGGING_ONLY
