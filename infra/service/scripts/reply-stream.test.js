@@ -71,6 +71,22 @@ describe("streamReply", () => {
     expect(JSON.parse(init.body)).toMatchObject({ stream: true, temperature: 1, top_p: 1 });
   });
 
+  it("asks for Salamandra unless told another model's name", async () => {
+    const fetch = vi.fn(async () => streamed("data: [DONE]\n\n"));
+    vi.stubGlobal("fetch", fetch);
+
+    await collect(streamReply("https://host", "key"));
+    await collect(
+      streamReply("https://host", "key", undefined, "BSC-LT/ALIA-40b-instruct-2601"),
+    );
+
+    const models = fetch.mock.calls.map(([, init]) => JSON.parse(init.body).model);
+    expect(models).toEqual([
+      "BSC-LT/salamandra-7b-instruct-2606",
+      "BSC-LT/ALIA-40b-instruct-2601",
+    ]);
+  });
+
   it("names the status when the host refuses", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("no", { status: 401 })));
 

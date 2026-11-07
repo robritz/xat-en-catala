@@ -128,6 +128,22 @@ run "salamandra_runs_on_an_l4" {
     condition     = google_cloud_run_v2_service.model_host.template[0].timeout == "120s"
     error_message = "A request should be held as long as the app's chat route holds it, 120 seconds."
   }
+  assert {
+    condition     = google_cloud_run_v2_service.model_host.template[0].containers[0].startup_probe[0].failure_threshold == 240
+    error_message = "Salamandra's instance should have four minutes to load its weights."
+  }
+}
+
+# ALIA's settings are tested in tests/alia, in ALIA's workspace.
+run "alia_is_refused_in_salamandras_workspace" {
+  command = plan
+
+  variables {
+    model    = "alia"
+    revision = "model-host-alia-1"
+  }
+
+  expect_failures = [google_cloud_run_v2_service.model_host]
 }
 
 run "an_unknown_model_is_refused" {

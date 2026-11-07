@@ -147,7 +147,19 @@ ALIA runs on an NVIDIA RTX PRO 6000. Cloud Run grants a project 3,000 milli GPU 
 
 The server checks an API key on every request except its health route. It reads the key from `LLAMA_API_KEY`, which Cloud Run sets from Secret Manager, so the key is in no image and no script.
 
+`model/alia/Dockerfile` is ALIA's, written to the same pattern: the same pinned engine image and the same flags, with ALIA's weights copied from `alia-weights:Q8_0-<revision>` into a layer of their own and served under the name the app asks for ALIA by, `BSC-LT/ALIA-40b-instruct-2601`. A different name there would make every request to ALIA fail.
+
 The Dockerfile alone decides what the image holds, so the image is tagged with the start of its checksum, which `model/image-tag.sh salamandra` prints. Both pipelines use it: the build to name the image it pushes, the deploy to find it. The Dockerfile's comments still name the weights build and mirror script at their old places under `model/`, since changing them would change the tag; they are corrected the next time the Dockerfile changes.
+
+The build pipeline runs with a 300 GB disk and a two-hour timeout, for ALIA's 43 GB layer, which Salamandra's builds get too since the pipeline is shared. Until ALIA has a trigger of its own, its service image is built by hand, which pushes `alia:<tag>` and `alia:latest`:
+
+```bash
+gcloud builds submit --config model/cloudbuild.yaml \
+  --project <project> --region europe-west4 \
+  --substitutions _MODEL=alia,_IMAGE_NAME=alia \
+  --service-account projects/<project>/serviceAccounts/model-host-build@<project>.iam.gserviceaccount.com \
+  --gcs-source-staging-dir gs://<project>-model-weights/source
+```
 
 ### Deploying on a merge
 
@@ -218,6 +230,22 @@ That keeps the latest revision as it is. A change to a setting needs a new revis
 
 An apply starts no instance, so it does not show whether the revision serves. The first request does that.
 
+ALIA's service is `model-host-alia`, with its state in the `alia` workspace: one NVIDIA RTX PRO 6000 with that GPU's minimum of 20 CPUs and 80 GiB, its key from `model-host-alia-api-key`, and otherwise the same scaling, concurrency and access as Salamandra's. Its startup probe allows 15 minutes for the 43 GB of weights to load, and a request is held for 900 seconds. Until ALIA has a deploy trigger of its own, it is deployed by hand, after its service image is built, with a revision named for the occasion:
+
+```bash
+tag=$(bash model/image-tag.sh alia)
+digest=$(gcloud artifacts docker images describe \
+  europe-west4-docker.pkg.dev/<project>/model-host/alia:$tag \
+  --format 'value(image_summary.digest)')
+terraform -chdir=infra/service init
+terraform -chdir=infra/service workspace select -or-create alia
+terraform -chdir=infra/service apply -var "model=alia" \
+  -var "image=europe-west4-docker.pkg.dev/<project>/model-host/alia@$digest" \
+  -var "revision=model-host-alia-$(date +%Y%m%d%H%M%S)"
+```
+
+Its first apply starts no instance, but it is the project's first service in the region with an RTX PRO 6000, which is when Cloud Run grants the GPUs. ALIA's settings are tested in its own workspace, apart from Salamandra's: see "Testing the Terraform".
+
 To point the app at the service, set `SALAMANDRA_HOST_URL` to `terraform -chdir=infra/service output -raw url` followed by `/v1`, and `SALAMANDRA_HOST_API_KEY` to the key.
 
 `infra/service/scripts/time-reply.js` sends the model host one message and prints, as one line of JSON, how long the first word of the reply took, which is the cold start when no instance was running:
@@ -225,6 +253,13 @@ To point the app at the service, set `SALAMANDRA_HOST_URL` to `terraform -chdir=
 ```bash
 MODEL_HOST_API_KEY=$(gcloud secrets versions access latest --secret model-host-api-key) \
   node infra/service/scripts/time-reply.js https://<service URL>
+```
+
+For ALIA, give it ALIA's key and the name it is served under:
+
+```bash
+MODEL_HOST_API_KEY=$(gcloud secrets versions access latest --secret model-host-alia-api-key) \
+  node infra/service/scripts/time-reply.js https://<service URL> BSC-LT/ALIA-40b-instruct-2601
 ```
 
 ### Going back
@@ -254,6 +289,12 @@ Both configurations have tests that plan against a mocked provider, so they reac
 ```bash
 terraform -chdir=infra/platform init -backend=false && terraform -chdir=infra/platform test
 terraform -chdir=infra/service init -backend=false && terraform -chdir=infra/service test
+```
+
+The service refuses to plan a model outside its own workspace, and a test plans in the workspace Terraform is in, so ALIA's tests are apart from Salamandra's, in `infra/service/tests/alia`, and run in ALIA's workspace:
+
+```bash
+TF_WORKSPACE=alia terraform -chdir=infra/service test -test-directory=tests/alia
 ```
 
 ## Hearing a reply

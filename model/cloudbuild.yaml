@@ -48,9 +48,18 @@ steps:
           model/${_MODEL}
         docker push --all-tags "${_IMAGE}"
 
-timeout: 1800s
+# Pulling ALIA's 43 GB weights image, copying the file into a layer and
+# pushing it takes far longer than Salamandra's 6.4 GB. A build that finds the
+# layer in the cache still pulls it.
+timeout: 7200s
 
 options:
+  # ALIA's file is held up to three times over: in the weights image, in the
+  # cache image and as the new image's layer. The worker's own files take
+  # 63 GB of the disk. Salamandra's builds get the same room, which they do
+  # not need, since the pipeline is shared and Cloud Build takes no
+  # substitution here.
+  diskSizeGb: 300
   # Lets _IMAGE be made from other substitutions.
   dynamicSubstitutions: true
   # A build that runs as its own service account has to say where its logs go.

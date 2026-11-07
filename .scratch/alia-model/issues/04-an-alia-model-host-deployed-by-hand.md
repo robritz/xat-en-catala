@@ -26,3 +26,11 @@ See `docs/specs/alia-model.md`, sections "Weights and GPU", "Images", "The servi
 
 - ALIA's service settings go in `models` in the service's Terraform, with the workspace `alia`, and in infra/platform's `models` under the same service name and workspace.
 - The service refuses to plan a model outside its own workspace, and `terraform test` always plans in the default workspace. A run for ALIA can therefore only expect that failure, not assert ALIA's settings. Find a way to test ALIA's values that does not loosen the guard, or say in this ticket why they are left to the first apply.
+
+## Notes from the code
+
+- ALIA's values are tested in its own workspace: `terraform test` plans in the workspace `TF_WORKSPACE` names, so `infra/service/tests/alia` runs with `TF_WORKSPACE=alia`, and CI runs it as a step of its own. The guard is unchanged.
+- ALIA is not yet in infra/platform's `models`: an entry there makes its triggers, which are ticket 05's.
+- The request timeout (900 s) and the startup probe (15 minutes) are provisional, for the first apply. Ticket 05 sets the timeout from the measured cold start.
+- The shared build pipeline now has a 300 GB disk and a two-hour timeout, for Salamandra's builds too: Cloud Build takes no substitution for either.
+- `time-reply.js` takes the served name, since it asked for Salamandra's by name.

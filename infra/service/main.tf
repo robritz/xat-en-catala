@@ -19,6 +19,23 @@ locals {
       memory = "16Gi"
       # 120 seconds, against a cold start of 10 to 20.
       timeout = "120s"
+      # Four minutes to load 6.4 GB of weights, which takes 10 to 20 seconds.
+      startup_seconds = 240
+    }
+    alia = {
+      workspace = "alia"
+      service   = "model-host-alia"
+      # One NVIDIA RTX PRO 6000, with that GPU's minimum of 20 CPUs and
+      # 80 GiB: ALIA does not fit an L4. See docs/adr/0003.
+      gpu    = "nvidia-rtx-pro-6000"
+      cpu    = "20"
+      memory = "80Gi"
+      # Long enough for any cold start a first deploy by hand might see. It
+      # is to be set from the measured one, with the chat route's time limit.
+      timeout = "900s"
+      # Fifteen minutes to load 43 GB of weights, a guess until a cold start
+      # is measured. Cloud Run allows a GPU's instance up to 30.
+      startup_seconds = 900
     }
   }
   model = local.models[var.model]
@@ -98,11 +115,11 @@ resource "google_cloud_run_v2_service" "model_host" {
 
       # Keeps requests from an instance until the weights are loaded: the
       # server's health route fails until then. It asks every second and
-      # gives up after four minutes.
+      # gives up after the model's startup_seconds.
       startup_probe {
         period_seconds    = 1
         timeout_seconds   = 1
-        failure_threshold = 240
+        failure_threshold = local.model.startup_seconds
         http_get {
           path = "/health"
           port = 8080
