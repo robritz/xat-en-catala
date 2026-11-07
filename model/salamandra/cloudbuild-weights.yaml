@@ -1,6 +1,6 @@
-# Builds Salamandra's weights image: the quantised weights file and nothing else. The
-# service image copies the file from it, so a routine deploy never moves the
-# weights.
+# Builds Salamandra's weights image: the quantised weights file and nothing
+# else. The service image copies the file from it, so a routine deploy never
+# moves the weights.
 #
 # Run by hand, once, and again only when the weights change, as docs/guide.md
 # shows. It needs no source: the file comes from the bucket that

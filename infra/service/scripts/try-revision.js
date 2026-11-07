@@ -16,20 +16,20 @@ import { timeFirstWord } from "./cold-start.js";
 import { streamReply } from "./reply-stream.js";
 
 const [tagUrl, revision, target] = process.argv.slice(2);
-const TARGET_SECONDS = Number(target);
+const targetSeconds = Number(target);
 const key = process.env.MODEL_HOST_API_KEY;
-if (!tagUrl || !revision || !(TARGET_SECONDS > 0) || !key) {
+if (!tagUrl || !revision || !(targetSeconds > 0) || !key) {
   console.error(
     "Usage: MODEL_HOST_API_KEY=<key> node infra/service/scripts/try-revision.js <tag URL> <revision> <target seconds>",
   );
   process.exit(1);
 }
 
-const signal = AbortSignal.timeout(TARGET_SECONDS * 1000);
+const signal = AbortSignal.timeout(targetSeconds * 1000);
 const { seconds, failure } = await timeFirstWord({
   replies: streamReply(tagUrl, key, signal),
   signal,
-  targetSeconds: TARGET_SECONDS,
+  targetSeconds,
 });
 
 console.log(

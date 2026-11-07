@@ -135,19 +135,21 @@ The Dockerfile alone decides what the image holds, so the image is tagged with t
 
 ### Deploying on a merge
 
-Each model has a build trigger and a deploy trigger of its own, which run the two shared pipelines with the model's settings as substitutions. The settings are in `models` in `infra/platform/pipelines.tf`: the model's image and service names, its key's secret, its Terraform state's prefix, and the cold start a new revision has to beat. A merge to `main` starts either of Salamandra's pipelines, or both, with nobody involved:
+Each model has a build trigger and a deploy trigger of its own, which run the two shared pipelines with the model's settings as substitutions. The settings are in `models` in `infra/platform/pipelines.tf`: the model's image and service names, its key's secret, its Terraform workspace, and the cold start a new revision has to beat. A merge to `main` starts either of Salamandra's pipelines, or both, with nobody involved:
 
 | Pipeline | Trigger | Runs on a merge that changes | Does |
 | -------- | ------- | ---------------------------- | ---- |
 | Build | `model-host-build` | anything under `model/salamandra/` | `model/cloudbuild.yaml`: builds the service image and pushes it as `service:<tag>`, and again as `service:latest`, which the next build reads as its cache. If `service:<tag>` is already pushed, it builds nothing |
-| Deploy | `model-host-deploy` | `model/salamandra/Dockerfile`, `infra/service/salamandra.tfvars` or the Terraform in `infra/service/` | `infra/service/cloudbuild.yaml`: deploys the image, as below |
+| Deploy | `model-host-deploy` | `model/salamandra/Dockerfile` or the Terraform in `infra/service/` | `infra/service/cloudbuild.yaml`: deploys the image, as below |
 
-A merge that changes none of these starts nothing, and a change to the shared pipelines or `model/image-tag.sh` alone starts nothing either. While the engine and the weights stay the same, the build takes the weights layer from `service:latest` and does not make it again, so a deploy that changes a flag moves no weights.
+A merge that changes none of these starts nothing, and a change to the shared pipelines or `model/image-tag.sh` alone starts nothing either.
+
+A trigger passes its substitutions to whatever version of the pipeline the merge holds, and Cloud Build fails a build that is passed a substitution its pipeline does not use, or that uses one it is not passed. So a change that alters both what the triggers pass and what the pipelines expect, such as adding a substitution, has to be applied to `infra/platform` immediately before it is merged, with nothing else merged in between. Applied later, the merge runs the new pipelines with the old substitutions; applied earlier, any other merge runs the old pipelines with the new ones. Either way the builds fail and the revision serving goes on serving. While the engine and the weights stay the same, the build takes the weights layer from `service:latest` and does not make it again, so a deploy that changes a flag moves no weights.
 
 The deploy pipeline runs as its own service account and:
 
 1. waits for `service:<tag>`, which the build pipeline pushes on the same merge. It gives up after 50 minutes, by which time the build has finished or failed;
-2. applies `infra/service`, in the model's own state and with its settings from `<model>.tfvars`, with that image as a revision that takes no traffic, reachable under the tag `candidate`. The revision that was serving keeps all traffic. No instance is started for the new one;
+2. applies `infra/service` for the model, in the model's workspace, with that image as a revision that takes no traffic, reachable under the tag `candidate`. The revision that was serving keeps all traffic. No instance is started for the new one;
 3. sends that revision one message, with the key from Secret Manager, through `infra/service/scripts/try-revision.js`, and waits for the first word of the reply. The revision has never run, so the wait is its cold start;
 4. applies `infra/service` again, sending all traffic to that revision by name, if the first word came within the model's target: 60 seconds for Salamandra. Each revision is named after its service and the build that made it, `model-host-<build ID>`, so the name is known before the deploy and never read back from Cloud Run.
 
@@ -177,25 +179,24 @@ gcloud builds submit --config model/cloudbuild.yaml \
 
 gcloud builds submit --config infra/service/cloudbuild.yaml \
   --project <project> --region europe-west4 \
-  --substitutions _MODEL=salamandra,_IMAGE_NAME=service,_SERVICE=model-host,_SECRET=model-host-api-key,_STATE_PREFIX=service,_TARGET_SECONDS=60 \
+  --substitutions _MODEL=salamandra,_IMAGE_NAME=service,_SERVICE=model-host,_SECRET=model-host-api-key,_WORKSPACE=default,_TARGET_SECONDS=60 \
   --service-account projects/<project>/serviceAccounts/model-host-deploy@<project>.iam.gserviceaccount.com \
   --gcs-source-staging-dir gs://<project>-model-weights/source
 ```
 
 ### The service
 
-`infra/service` holds every setting of a model's Cloud Run service. What differs between models is a variable, set in the model's `<model>.tfvars`, and each model's service has a Terraform state of its own, under the prefix given at `init`. Salamandra's service is `model-host` in `europe-west4`, in `salamandra.tfvars`: one NVIDIA L4, 4 CPUs and 16 GiB of memory, billed while an instance is up, with its state under the prefix `service`. It scales between zero and one instance, so it costs nothing when idle and never more than one GPU, and it takes four requests at once. A startup probe on the server's `/health` keeps requests from an instance until the weights are loaded. Cloud Run lets anyone reach the service; the API key is the gate.
+`infra/service` holds every setting of a model's Cloud Run service. What differs between models is in its `models`, chosen by the variable `model`, and each model's service has a Terraform state of its own, in a workspace named in `models`. An apply for one model in another's workspace is refused, since it would replace that model's service. Salamandra's service is `model-host` in `europe-west4`: one NVIDIA L4, 4 CPUs and 16 GiB of memory, billed while an instance is up, with its state in the `default` workspace. It scales between zero and one instance, so it costs nothing when idle and never more than one GPU, and it takes four requests at once. A startup probe on the server's `/health` keeps requests from an instance until the weights are loaded. Cloud Run lets anyone reach the service; the API key is the gate.
 
-Besides the model's settings, it takes the image to run, `image`, the name of the latest revision, `revision`, and optionally a revision to keep all traffic on, `serving_revision`. Left out, all traffic goes to the latest revision. To apply it by hand, which the deploy pipeline otherwise does, with the image it runs now:
+Besides the model, it takes the image to run, `image`, the name of the latest revision, `revision`, and optionally a revision to keep all traffic on, `serving_revision`. Left out, all traffic goes to the latest revision. To apply it by hand, which the deploy pipeline otherwise does, with the image it runs now:
 
 ```bash
-terraform -chdir=infra/service init -reconfigure -backend-config "prefix=service"
-terraform -chdir=infra/service apply -var-file salamandra.tfvars \
+terraform -chdir=infra/service init
+terraform -chdir=infra/service workspace select default
+terraform -chdir=infra/service apply -var "model=salamandra" \
   -var "image=$(terraform -chdir=infra/service output -raw image)" \
   -var "revision=$(terraform -chdir=infra/service output -raw revision)"
 ```
-
-`-reconfigure` makes sure the state is the one named, and not another model's from an earlier `init`.
 
 That keeps the latest revision as it is. A change to a setting needs a new revision, and so a new name: `revision=model-host-<anything new>`, in lowercase letters, digits and dashes. The deploy pipeline names each revision after its build.
 
@@ -221,8 +222,8 @@ gcloud run revisions list --service model-host --project <project> --region euro
 Then, naming the revision to go back to, and keeping the latest revision's image as it is:
 
 ```bash
-terraform -chdir=infra/service init -reconfigure -backend-config "prefix=service"
-terraform -chdir=infra/service apply -var-file salamandra.tfvars \
+terraform -chdir=infra/service workspace select default
+terraform -chdir=infra/service apply -var "model=salamandra" \
   -var "image=$(terraform -chdir=infra/service output -raw image)" \
   -var "revision=$(terraform -chdir=infra/service output -raw revision)" \
   -var "serving_revision=<revision>"
@@ -323,7 +324,7 @@ This is a light gate to keep casual visitors out, not real authentication. Anyon
 | `model/cloudbuild.yaml`             | The build pipeline a merge runs for a model: builds its service image and pushes it |
 | `model/image-tag.sh`                | Prints a model's service image tag, from its Dockerfile's checksum, for both pipelines |
 | `infra/platform/`                   | Terraform for the cloud resources the model hosts are assembled from, and each model's triggers. Applied by hand |
-| `infra/service/`                    | Terraform for a model's Cloud Run service, with each model's settings in `<model>.tfvars` |
+| `infra/service/`                    | Terraform for a model's Cloud Run service, which holds every model's settings |
 | `infra/service/cloudbuild.yaml`     | The deploy pipeline a merge runs for a model: deploys the image with no traffic, tries it, and sends it traffic |
 | `infra/service/scripts/try-revision.js` | Sends a new revision one message and logs its cold start, failing past the model's target |
 | `infra/service/scripts/serving-revision.js` | Prints the revision taking the service's traffic, for the deploy pipeline |

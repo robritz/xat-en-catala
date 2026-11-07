@@ -27,17 +27,19 @@ resource "google_developer_connect_git_repository_link" "repository" {
 }
 
 # The models, each with a model host of its own, and what their pipelines
-# need to know of them: the directory under model/ that holds the Dockerfile,
-# the names of its service image and its service, its key's secret, the prefix
-# of its Terraform state, and the cold start a new revision has to beat.
-# infra/service/<model>.tfvars holds the rest of its service's settings.
+# need to know of them. Each model's directory under model/ holds its
+# Dockerfile, and infra/service's models hold its service's settings, under
+# the same service name and workspace as here.
+#
+# Salamandra's image, service, secret and workspace keep the names they had
+# when it was the only model, so that nothing already made is replaced.
 locals {
   models = {
     salamandra = {
       image          = "service"
       service        = "model-host"
       secret         = google_secret_manager_secret.api_key.secret_id
-      state_prefix   = "service"
+      workspace      = "default"
       target_seconds = 60
     }
   }
@@ -72,10 +74,10 @@ resource "google_cloudbuild_trigger" "build" {
 }
 
 # Deploys a model's service image when its Dockerfile, which decides the
-# image, its service settings or the shared service Terraform changes. It
-# waits for the build trigger's image. Changes to the pipeline or its scripts
-# alone deploy nothing, since they would make no new revision and the message
-# would time a warm one.
+# image, or the service's Terraform, which holds every model's settings,
+# changes. It waits for the build trigger's image. Changes to the pipeline or
+# its scripts alone deploy nothing, since they would make no new revision and
+# the message would time a warm one.
 resource "google_cloudbuild_trigger" "deploy" {
   for_each = local.models
 
@@ -83,7 +85,7 @@ resource "google_cloudbuild_trigger" "deploy" {
   location        = var.region
   description     = "Deploys ${each.key}'s model host when a merge to main changes its image or its service"
   filename        = "infra/service/cloudbuild.yaml"
-  included_files  = ["model/${each.key}/Dockerfile", "infra/service/*.tf", "infra/service/${each.key}.tfvars"]
+  included_files  = ["model/${each.key}/Dockerfile", "infra/service/*.tf"]
   service_account = google_service_account.deploy.id
 
   substitutions = {
@@ -91,7 +93,7 @@ resource "google_cloudbuild_trigger" "deploy" {
     _IMAGE_NAME     = each.value.image
     _SERVICE        = each.value.service
     _SECRET         = each.value.secret
-    _STATE_PREFIX   = each.value.state_prefix
+    _WORKSPACE      = each.value.workspace
     _TARGET_SECONDS = tostring(each.value.target_seconds)
   }
 

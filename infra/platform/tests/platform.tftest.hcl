@@ -54,8 +54,8 @@ run "each_model_builds_and_deploys_only_on_its_own_changes" {
     error_message = "Salamandra should build only when its directory changes."
   }
   assert {
-    condition     = toset(google_cloudbuild_trigger.deploy["salamandra"].included_files) == toset(["model/salamandra/Dockerfile", "infra/service/*.tf", "infra/service/salamandra.tfvars"])
-    error_message = "Salamandra should deploy only when its image, its settings or the shared service changes."
+    condition     = toset(google_cloudbuild_trigger.deploy["salamandra"].included_files) == toset(["model/salamandra/Dockerfile", "infra/service/*.tf"])
+    error_message = "Salamandra should deploy only when its image or the service changes."
   }
 }
 
@@ -75,10 +75,10 @@ run "each_model_passes_its_settings_to_the_pipelines" {
       _IMAGE_NAME     = "service"
       _SERVICE        = "model-host"
       _SECRET         = "model-host-api-key"
-      _STATE_PREFIX   = "service"
+      _WORKSPACE      = "default"
       _TARGET_SECONDS = "60"
     })
-    error_message = "Salamandra's deploy should be told its service, secret, state and a 60-second target."
+    error_message = "Salamandra's deploy should be told its service, secret, workspace and a 60-second target."
   }
 }
 

@@ -7,7 +7,6 @@
 # which runs on the same merge but apart from it, waits for an image under the
 # same tag. A merge that leaves the Dockerfile alone keeps the tag, so the
 # build finds the image already pushed and builds nothing.
-
 #
 #   bash model/image-tag.sh <model>    e.g. salamandra
 

@@ -1,26 +1,24 @@
 # The deploy pipeline of a model's host, shared by the models. A merge to main
-# that changes the model's Dockerfile, its settings in <model>.tfvars or the
-# Terraform here runs it, through that model's trigger, which infra/platform
-# creates and which passes the model's settings as the substitutions below;
-# it can also be run by hand, as docs/guide.md shows. The source is the whole
-# repository.
+# that changes the model's Dockerfile or the Terraform here runs it, through
+# the model's trigger, which infra/platform creates and which passes the
+# model's settings as the substitutions below. It can also be run by hand, as
+# docs/guide.md shows. The source is the whole repository.
 #
 # It builds nothing. It waits for the service image that the model's
-# Dockerfile describes, which the build pipeline, model/cloudbuild.yaml,
-# pushes on the same merge, and applies the Terraform in this directory with
-# it, in the model's own state: first as a revision that takes no traffic,
-# reachable under the tag "candidate", then, once that revision has sent the
-# first word of a reply to one message within the model's target, with all
-# traffic sent to that revision by name, so that no other revision can take it
-# in between. Otherwise the build fails and the revision serving before it
-# keeps serving.
+# Dockerfile describes, which the build pipeline, model/cloudbuild.yaml, pushes
+# on the same merge. It applies the Terraform here with that image, in the
+# model's workspace, as a revision that takes no traffic, reachable under the
+# tag "candidate". If that revision sends the first word of a reply to one
+# message within the model's target, it applies again with all traffic sent to
+# that revision by name, so that no other revision can take it in between.
+# Otherwise the build fails and the revision serving before it keeps serving.
 #
 # Applies wait up to ten minutes for another deploy's hold on the state.
 #
 # Terraform's version here is the one .github/workflows/test.yml tests with.
 # Change both together.
 
-# _MODEL, _IMAGE_NAME, _SERVICE, _SECRET, _STATE_PREFIX and _TARGET_SECONDS
+# _MODEL, _IMAGE_NAME, _SERVICE, _SECRET, _WORKSPACE and _TARGET_SECONDS
 # come from the model's trigger, and have no defaults here, so that a model's
 # deploy can never fall back on another's.
 substitutions:
@@ -94,9 +92,10 @@ steps:
       - -c
       - |
         set -eu
-        terraform init -input=false -backend-config "prefix=${_STATE_PREFIX}"
+        terraform init -input=false
+        terraform workspace select -or-create ${_WORKSPACE}
         terraform apply -input=false -auto-approve -lock-timeout=10m \
-          -var-file ${_MODEL}.tfvars \
+          -var "model=${_MODEL}" \
           -var "image=$$(cat /workspace/image)" \
           -var "revision=${_SERVICE}-${BUILD_ID}" \
           -var "serving_revision=$$(cat /workspace/serving_revision)"
@@ -128,7 +127,7 @@ steps:
       - |
         set -eu
         terraform apply -input=false -auto-approve -lock-timeout=10m \
-          -var-file ${_MODEL}.tfvars \
+          -var "model=${_MODEL}" \
           -var "image=$$(cat /workspace/image)" \
           -var "revision=${_SERVICE}-${BUILD_ID}" \
           -var "serving_revision=${_SERVICE}-${BUILD_ID}"
