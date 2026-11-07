@@ -1,5 +1,6 @@
-# The model host on Cloud Run. Every setting of the service is here. The
-# deploy pipeline, infra/service/cloudbuild.yaml, applies it twice per deploy:
+# A model host on Cloud Run. Every setting of the service is here, and what
+# differs between models is a variable, set in <model>.tfvars. The deploy
+# pipeline, infra/service/cloudbuild.yaml, applies it twice per deploy:
 # once keeping traffic on the serving revision while the new one is tried, and
 # once keeping it on the new one, named. Nothing in the second apply changes
 # the revision's template, so it makes no new revision.
@@ -9,7 +10,7 @@ locals {
 }
 
 resource "google_cloud_run_v2_service" "model_host" {
-  name     = "model-host"
+  name     = var.service
   location = var.region
   ingress  = "INGRESS_TRAFFIC_ALL"
 
@@ -17,11 +18,10 @@ resource "google_cloud_run_v2_service" "model_host" {
     revision        = var.revision
     service_account = "model-host@${var.project}.iam.gserviceaccount.com"
 
-    # One NVIDIA L4 with 4 CPUs and 16 GiB, billed for as long as an instance
-    # is up, which a GPU requires. Zero to one instance caps spend at one GPU
-    # and costs nothing when idle.
+    # One GPU, billed for as long as an instance is up, which a GPU requires.
+    # Zero to one instance caps spend at one GPU and costs nothing when idle.
     node_selector {
-      accelerator = "nvidia-l4"
+      accelerator = var.gpu
     }
     gpu_zonal_redundancy_disabled = true
     scaling {
@@ -33,9 +33,8 @@ resource "google_cloud_run_v2_service" "model_host" {
     max_instance_request_concurrency = 4
 
     # Matches the app's chat route, which holds a request open through a cold
-    # start: 120 seconds, against a cold start of 10 to 20. Change both
-    # together.
-    timeout = "120s"
+    # start. Change both together.
+    timeout = var.timeout
 
     # A deploy starts no instance: the first request to a revision does, so
     # the pipeline can time a real cold start, and its message, not this
@@ -52,8 +51,8 @@ resource "google_cloud_run_v2_service" "model_host" {
 
       resources {
         limits = {
-          cpu              = "4"
-          memory           = "16Gi"
+          cpu              = var.cpu
+          memory           = var.memory
           "nvidia.com/gpu" = "1"
         }
         cpu_idle = false
@@ -65,7 +64,7 @@ resource "google_cloud_run_v2_service" "model_host" {
         name = "LLAMA_API_KEY"
         value_source {
           secret_key_ref {
-            secret  = "model-host-api-key"
+            secret  = var.secret
             version = "latest"
           }
         }

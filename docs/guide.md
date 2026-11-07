@@ -56,7 +56,7 @@ The model runs on Google Cloud Run: a quantised copy served by llama.cpp, with a
 
 The host is in two parts, each with a pipeline of its own that a merge to `main` starts (`docs/adr/0002-terraform-and-separate-build-and-deploy-pipelines.md` gives the reasons):
 
-- `model/` is the **build**: the service image and the pipeline that builds it;
+- `model/` is the **build**: each model's service image, in a directory of its own (`model/salamandra/`), and the pipeline that builds them;
 - `infra/` is the **deploy**: Terraform for the cloud resources (`infra/platform`) and for the Cloud Run service (`infra/service`), and the pipeline that applies the service.
 
 The commands below need `gcloud`, signed in as someone who can create these resources, and Terraform 1.10 or later. `<project>` is `project-45649980-817a-462c-b12`.
@@ -103,10 +103,10 @@ To read it, for the app's `MODEL_HOST_API_KEY`, run `gcloud secrets versions acc
 
 ### The weights
 
-`model/mirror-weights.sh` mirrors the weights into the bucket, so that no build depends on Hugging Face: the Q6_K quantisation of the model, 6.38 GB, from [`mradermacher/salamandra-7b-instruct-2606-GGUF`](https://huggingface.co/mradermacher/salamandra-7b-instruct-2606-GGUF) at a pinned revision. The file is downloaded to a temporary directory, its SHA-256 is checked against the value in the script, and it is uploaded only if they match. Run again, it leaves a file already in the bucket alone. It needs `curl`.
+`model/salamandra/mirror-weights.sh` mirrors the weights into the bucket, so that no build depends on Hugging Face: the Q6_K quantisation of the model, 6.38 GB, from [`mradermacher/salamandra-7b-instruct-2606-GGUF`](https://huggingface.co/mradermacher/salamandra-7b-instruct-2606-GGUF) at a pinned revision. The file is downloaded to a temporary directory, its SHA-256 is checked against the value in the script, and it is uploaded only if they match. Run again, it leaves a file already in the bucket alone. It needs `curl`.
 
 ```bash
-model/mirror-weights.sh
+model/salamandra/mirror-weights.sh
 ```
 
 The weights image holds the weights file and nothing else, and the service image copies the file from it. It is built by hand, once, and again only when the weights change:
@@ -114,15 +114,15 @@ The weights image holds the weights file and nothing else, and the service image
 ```bash
 gcloud builds submit --no-source \
   --project <project> --region europe-west4 \
-  --config model/cloudbuild-weights.yaml \
+  --config model/salamandra/cloudbuild-weights.yaml \
   --service-account projects/<project>/serviceAccounts/model-host-build@<project>.iam.gserviceaccount.com
 ```
 
-Its tag names the quantisation and the revision it holds, as in `weights:Q6_K-8bcd7d8d8545749ef73b3046f7cb5cd64d8c70c1`. To change the weights, change the file, revision and checksum at the top of `model/mirror-weights.sh` and the same file and revision in `model/cloudbuild-weights.yaml`, then run both again. The service image names them too: the weights image's tag as `WEIGHTS_TAG` in `model/Dockerfile`, and the file in its `CMD`.
+Its tag names the quantisation and the revision it holds, as in `weights:Q6_K-8bcd7d8d8545749ef73b3046f7cb5cd64d8c70c1`. To change the weights, change the file, revision and checksum at the top of `model/salamandra/mirror-weights.sh` and the same file and revision in `model/salamandra/cloudbuild-weights.yaml`, then run both again. The service image names them too: the weights image's tag as `WEIGHTS_TAG` in `model/salamandra/Dockerfile`, and the file in its `CMD`.
 
 ### The service image
 
-`model/Dockerfile` puts the weights beside llama.cpp's server. It starts from the official `server-cuda` image, pinned by digest, and copies the weights from the weights image into a layer of their own, ahead of the server's flags, so that changing a flag does not move 6.4 GB. The flags are the image's `CMD`:
+`model/salamandra/Dockerfile` puts the weights beside llama.cpp's server. It starts from the official `server-cuda` image, pinned by digest, and copies the weights from the weights image into a layer of their own, ahead of the server's flags, so that changing a flag does not move 6.4 GB. The flags are the image's `CMD`:
 
 - four replies at once, with 8,192 tokens of context each;
 - the chat template embedded in the weights file, since no other is given;
@@ -131,27 +131,27 @@ Its tag names the quantisation and the revision it holds, as in `weights:Q6_K-8b
 
 The server checks an API key on every request except its health route. It reads the key from `LLAMA_API_KEY`, which Cloud Run sets from Secret Manager, so the key is in no image and no script.
 
-The Dockerfile alone decides what the image holds, so the image is tagged with the start of its checksum, which `model/image-tag.sh` prints. Both pipelines use it: the build to name the image it pushes, the deploy to find it.
+The Dockerfile alone decides what the image holds, so the image is tagged with the start of its checksum, which `model/image-tag.sh salamandra` prints. Both pipelines use it: the build to name the image it pushes, the deploy to find it. The Dockerfile's comments still name the weights build and mirror script at their old places under `model/`, since changing them would change the tag; they are corrected the next time the Dockerfile changes.
 
 ### Deploying on a merge
 
-A merge to `main` starts either pipeline, or both, with nobody involved:
+Each model has a build trigger and a deploy trigger of its own, which run the two shared pipelines with the model's settings as substitutions. The settings are in `models` in `infra/platform/pipelines.tf`: the model's image and service names, its key's secret, its Terraform state's prefix, and the cold start a new revision has to beat. A merge to `main` starts either of Salamandra's pipelines, or both, with nobody involved:
 
 | Pipeline | Trigger | Runs on a merge that changes | Does |
 | -------- | ------- | ---------------------------- | ---- |
-| Build | `model-host-build` | anything under `model/` | `model/cloudbuild.yaml`: builds the service image and pushes it as `service:<tag>`, and again as `service:latest`, which the next build reads as its cache. If `service:<tag>` is already pushed, it builds nothing |
-| Deploy | `model-host-deploy` | `model/Dockerfile` or the Terraform in `infra/service/` | `infra/service/cloudbuild.yaml`: deploys the image, as below |
+| Build | `model-host-build` | anything under `model/salamandra/` | `model/cloudbuild.yaml`: builds the service image and pushes it as `service:<tag>`, and again as `service:latest`, which the next build reads as its cache. If `service:<tag>` is already pushed, it builds nothing |
+| Deploy | `model-host-deploy` | `model/salamandra/Dockerfile`, `infra/service/salamandra.tfvars` or the Terraform in `infra/service/` | `infra/service/cloudbuild.yaml`: deploys the image, as below |
 
-A merge that changes neither starts nothing. While the engine and the weights stay the same, the build takes the weights layer from `service:latest` and does not make it again, so a deploy that changes a flag moves no weights.
+A merge that changes none of these starts nothing, and a change to the shared pipelines or `model/image-tag.sh` alone starts nothing either. While the engine and the weights stay the same, the build takes the weights layer from `service:latest` and does not make it again, so a deploy that changes a flag moves no weights.
 
 The deploy pipeline runs as its own service account and:
 
 1. waits for `service:<tag>`, which the build pipeline pushes on the same merge. It gives up after 50 minutes, by which time the build has finished or failed;
-2. applies `infra/service` with that image as a revision that takes no traffic, reachable under the tag `candidate`. The revision that was serving keeps all traffic. No instance is started for the new one;
+2. applies `infra/service`, in the model's own state and with its settings from `<model>.tfvars`, with that image as a revision that takes no traffic, reachable under the tag `candidate`. The revision that was serving keeps all traffic. No instance is started for the new one;
 3. sends that revision one message, with the key from Secret Manager, through `infra/service/scripts/try-revision.js`, and waits for the first word of the reply. The revision has never run, so the wait is its cold start;
-4. applies `infra/service` again, sending all traffic to that revision by name, if the first word came within 60 seconds. Each revision is named after the build that made it, `model-host-<build ID>`, so the name is known before the deploy and never read back from Cloud Run.
+4. applies `infra/service` again, sending all traffic to that revision by name, if the first word came within the model's target: 60 seconds for Salamandra. Each revision is named after its service and the build that made it, `model-host-<build ID>`, so the name is known before the deploy and never read back from Cloud Run.
 
-No reply, an error, or a first word after 60 seconds fails the deploy at step 3, and the revision serving before it goes on serving. Each pipeline's result shows on the commit in GitHub as a check named after its trigger, which links to the build's log.
+No reply, an error, or a first word after the target fails the deploy at step 3, and the revision serving before it goes on serving. Each pipeline's result shows on the commit in GitHub as a check named after its trigger, which links to the build's log.
 
 Every deploy writes the cold start it measured to its build log as one line of JSON, whether it passed or not:
 
@@ -166,32 +166,36 @@ gcloud logging read 'logName="projects/<project>/logs/cloudbuild" AND textPayloa
   --project <project> --format 'value(timestamp,textPayload)'
 ```
 
-To run either pipeline by hand, without a merge, from the repository root, which uploads the repository's files less what `.gitignore` leaves out:
+To run either pipeline by hand, without a merge, from the repository root, which uploads the repository's files less what `.gitignore` leaves out, give it the model's settings as its trigger does:
 
 ```bash
 gcloud builds submit --config model/cloudbuild.yaml \
   --project <project> --region europe-west4 \
+  --substitutions _MODEL=salamandra,_IMAGE_NAME=service \
   --service-account projects/<project>/serviceAccounts/model-host-build@<project>.iam.gserviceaccount.com \
   --gcs-source-staging-dir gs://<project>-model-weights/source
 
 gcloud builds submit --config infra/service/cloudbuild.yaml \
   --project <project> --region europe-west4 \
+  --substitutions _MODEL=salamandra,_IMAGE_NAME=service,_SERVICE=model-host,_SECRET=model-host-api-key,_STATE_PREFIX=service,_TARGET_SECONDS=60 \
   --service-account projects/<project>/serviceAccounts/model-host-deploy@<project>.iam.gserviceaccount.com \
   --gcs-source-staging-dir gs://<project>-model-weights/source
 ```
 
 ### The service
 
-`infra/service` holds every setting of the Cloud Run service. The service is `model-host` in `europe-west4`: one NVIDIA L4, 4 CPUs and 16 GiB of memory, billed while an instance is up. It scales between zero and one instance, so it costs nothing when idle and never more than one GPU, and it takes four requests at once. A startup probe on the server's `/health` keeps requests from an instance until the weights are loaded. Cloud Run lets anyone reach the service; the API key is the gate.
+`infra/service` holds every setting of a model's Cloud Run service. What differs between models is a variable, set in the model's `<model>.tfvars`, and each model's service has a Terraform state of its own, under the prefix given at `init`. Salamandra's service is `model-host` in `europe-west4`, in `salamandra.tfvars`: one NVIDIA L4, 4 CPUs and 16 GiB of memory, billed while an instance is up, with its state under the prefix `service`. It scales between zero and one instance, so it costs nothing when idle and never more than one GPU, and it takes four requests at once. A startup probe on the server's `/health` keeps requests from an instance until the weights are loaded. Cloud Run lets anyone reach the service; the API key is the gate.
 
-It takes the image to run, `image`, the name of the latest revision, `revision`, and optionally a revision to keep all traffic on, `serving_revision`. Left out, all traffic goes to the latest revision. To apply it by hand, which the deploy pipeline otherwise does, with the image it runs now:
+Besides the model's settings, it takes the image to run, `image`, the name of the latest revision, `revision`, and optionally a revision to keep all traffic on, `serving_revision`. Left out, all traffic goes to the latest revision. To apply it by hand, which the deploy pipeline otherwise does, with the image it runs now:
 
 ```bash
-terraform -chdir=infra/service init
-terraform -chdir=infra/service apply \
+terraform -chdir=infra/service init -reconfigure -backend-config "prefix=service"
+terraform -chdir=infra/service apply -var-file salamandra.tfvars \
   -var "image=$(terraform -chdir=infra/service output -raw image)" \
   -var "revision=$(terraform -chdir=infra/service output -raw revision)"
 ```
+
+`-reconfigure` makes sure the state is the one named, and not another model's from an earlier `init`.
 
 That keeps the latest revision as it is. A change to a setting needs a new revision, and so a new name: `revision=model-host-<anything new>`, in lowercase letters, digits and dashes. The deploy pipeline names each revision after its build.
 
@@ -217,7 +221,8 @@ gcloud run revisions list --service model-host --project <project> --region euro
 Then, naming the revision to go back to, and keeping the latest revision's image as it is:
 
 ```bash
-terraform -chdir=infra/service apply \
+terraform -chdir=infra/service init -reconfigure -backend-config "prefix=service"
+terraform -chdir=infra/service apply -var-file salamandra.tfvars \
   -var "image=$(terraform -chdir=infra/service output -raw image)" \
   -var "revision=$(terraform -chdir=infra/service output -raw revision)" \
   -var "serving_revision=<revision>"
@@ -312,15 +317,15 @@ This is a light gate to keep casual visitors out, not real authentication. Anyon
 | `src/lib/learner-profile.ts`        | The native languages and levels, the check of a profile, and its storage in `localStorage` |
 | `src/lib/token-usage.ts`            | The token counts of the conversation, readable from any component with `useTokenUsage` |
 | `docs/comparison/`                  | A fixed set of messages for comparing model hosts, the replies of the host before Cloud Run and of Cloud Run, and a script to replay them |
-| `model/Dockerfile`                  | The model host's service image: llama.cpp's server, the weights and the server's flags |
-| `model/cloudbuild.yaml`             | The build pipeline a merge runs: builds the service image and pushes it |
-| `model/cloudbuild-weights.yaml`     | Builds the weights image from the mirrored file. Run by hand    |
-| `model/image-tag.sh`                | Prints the service image's tag, from the Dockerfile's checksum, for both pipelines |
-| `model/mirror-weights.sh`           | Mirrors the weights from Hugging Face into the project          |
-| `infra/platform/`                   | Terraform for the cloud resources the model host is assembled from, and its triggers. Applied by hand |
-| `infra/service/`                    | Terraform for the Cloud Run service, which holds its settings   |
-| `infra/service/cloudbuild.yaml`     | The deploy pipeline a merge runs: deploys the image with no traffic, tries it, and sends it traffic |
-| `infra/service/scripts/try-revision.js` | Sends a new revision one message and logs its cold start, failing past 60 seconds |
+| `model/salamandra/Dockerfile`       | Salamandra's service image: llama.cpp's server, the weights and the server's flags |
+| `model/salamandra/cloudbuild-weights.yaml` | Builds Salamandra's weights image from the mirrored file. Run by hand |
+| `model/salamandra/mirror-weights.sh` | Mirrors Salamandra's weights from Hugging Face into the project |
+| `model/cloudbuild.yaml`             | The build pipeline a merge runs for a model: builds its service image and pushes it |
+| `model/image-tag.sh`                | Prints a model's service image tag, from its Dockerfile's checksum, for both pipelines |
+| `infra/platform/`                   | Terraform for the cloud resources the model hosts are assembled from, and each model's triggers. Applied by hand |
+| `infra/service/`                    | Terraform for a model's Cloud Run service, with each model's settings in `<model>.tfvars` |
+| `infra/service/cloudbuild.yaml`     | The deploy pipeline a merge runs for a model: deploys the image with no traffic, tries it, and sends it traffic |
+| `infra/service/scripts/try-revision.js` | Sends a new revision one message and logs its cold start, failing past the model's target |
 | `infra/service/scripts/serving-revision.js` | Prints the revision taking the service's traffic, for the deploy pipeline |
 | `infra/service/scripts/time-reply.js` | Sends the model host one message and times the reply          |
 | `infra/service/scripts/reply-stream.js` | Sends the model host one message and streams the reply, for the scripts above |
@@ -357,8 +362,8 @@ npm test        # Vitest in watch mode; `npm test -- run` for a single run
 
 Tests use [Vitest](https://vitest.dev) and React Testing Library, and sit next to the code they cover as `*.test.ts(x)`. They never call the model host: `fetch`, the model, cookies and the environment variables are stubbed.
 
-Every pull request to `main`, and every push to it, runs all the checks in GitHub Actions, `.github/workflows/test.yml`, and shows each job's result on the pull request as a check under `test`: the typecheck, ESLint and these tests; `terraform fmt -check` and `terraform test` in both Terraform configurations (see "Testing the Terraform"); and hadolint on `model/Dockerfile`. It uses no secrets. To lint the Dockerfile before pushing:
+Every pull request to `main`, and every push to it, runs all the checks in GitHub Actions, `.github/workflows/test.yml`, and shows each job's result on the pull request as a check under `test`: the typecheck, ESLint and these tests; `terraform fmt -check` and `terraform test` in both Terraform configurations (see "Testing the Terraform"); and hadolint on every model's Dockerfile. It uses no secrets. To lint a Dockerfile before pushing:
 
 ```bash
-docker run --rm -i hadolint/hadolint:v2.15.1-debian hadolint - < model/Dockerfile
+docker run --rm -i hadolint/hadolint:v2.15.1-debian hadolint - < model/salamandra/Dockerfile
 ```

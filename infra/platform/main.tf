@@ -28,8 +28,8 @@ resource "google_artifact_registry_repository" "model_host" {
   depends_on = [google_project_service.apis]
 }
 
-# model/mirror-weights.sh puts the weights file here, and the weights image is
-# built from it.
+# Each model's mirror-weights.sh puts its weights file here, and its weights
+# image is built from it.
 resource "google_storage_bucket" "weights" {
   name                        = "${var.project}-model-weights"
   location                    = var.region

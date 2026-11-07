@@ -2,25 +2,25 @@
 // and waits for the first word of the reply. infra/service/cloudbuild.yaml
 // runs it before it sends traffic to the revision.
 //
-//   MODEL_HOST_API_KEY=<key> node infra/service/scripts/try-revision.js <tag URL> <revision>
+//   MODEL_HOST_API_KEY=<key> node infra/service/scripts/try-revision.js <tag URL> <revision> <target seconds>
 //
 // The revision has never run, so the wait is its cold start. It prints that as
 // one line of JSON, e.g.
 //
 //   {"event":"cold_start","revision":"model-host-00002-abc","seconds":10.9,"passed":true}
 //
-// and exits with 1, naming what went wrong, if no word came within the target.
+// and exits with 1, naming what went wrong, if no word came within the target,
+// which is the model's: infra/platform's models hold it.
 
 import { timeFirstWord } from "./cold-start.js";
 import { streamReply } from "./reply-stream.js";
 
-const TARGET_SECONDS = 60;
-
-const [tagUrl, revision] = process.argv.slice(2);
+const [tagUrl, revision, target] = process.argv.slice(2);
+const TARGET_SECONDS = Number(target);
 const key = process.env.MODEL_HOST_API_KEY;
-if (!tagUrl || !revision || !key) {
+if (!tagUrl || !revision || !(TARGET_SECONDS > 0) || !key) {
   console.error(
-    "Usage: MODEL_HOST_API_KEY=<key> node infra/service/scripts/try-revision.js <tag URL> <revision>",
+    "Usage: MODEL_HOST_API_KEY=<key> node infra/service/scripts/try-revision.js <tag URL> <revision> <target seconds>",
   );
   process.exit(1);
 }

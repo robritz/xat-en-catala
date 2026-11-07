@@ -1,14 +1,16 @@
-# The build pipeline of the model host. A merge to main that changes model/
-# runs it, through the trigger infra/platform creates; it can also be run by
-# hand, as docs/guide.md shows. The source is the whole repository.
+# The build pipeline of a model's host, shared by the models. A merge to main
+# that changes a model's directory under model/ runs it, through that model's
+# trigger, which infra/platform creates and which names the model in _MODEL
+# and its image in _IMAGE_NAME; it can also be run by hand, as docs/guide.md
+# shows. The source is the whole repository.
 #
 # It builds the service image and pushes it, and does nothing else: deploying
 # it is the deploy pipeline's work, infra/service/cloudbuild.yaml, which the
 # same merge starts and which waits for the image this pushes.
 #
-# The image is tagged with model/image-tag.sh, from the Dockerfile's checksum.
-# When an image is already pushed under that tag, as when a merge changed
-# model/ but not the Dockerfile, nothing is built.
+# The image is tagged with model/image-tag.sh, from the model's Dockerfile's
+# checksum. When an image is already pushed under that tag, as when a merge
+# changed the model's directory but not its Dockerfile, nothing is built.
 #
 # Each build also pushes the image as "latest", and the next build reads that
 # as its cache. While the engine and the weights stay the same, the weights
@@ -19,7 +21,7 @@
 
 substitutions:
   _REPOSITORY: model-host
-  _REGISTRY: ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}
+  _IMAGE: ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}
 
 steps:
   - id: build and push the service image
@@ -31,7 +33,7 @@ steps:
       - -c
       - |
         set -euo pipefail
-        image="${_REGISTRY}/service:$$(bash model/image-tag.sh)"
+        image="${_IMAGE}:$$(bash model/image-tag.sh ${_MODEL})"
         if docker manifest inspect "$$image" >/dev/null 2>&1; then
           echo "$$image is pushed already, so there is nothing to build."
           exit 0
@@ -39,17 +41,17 @@ steps:
         # BUILDKIT_INLINE_CACHE writes into the image what the next build
         # needs to use it as a cache.
         docker build \
-          --cache-from "${_REGISTRY}/service:latest" \
+          --cache-from "${_IMAGE}:latest" \
           --build-arg BUILDKIT_INLINE_CACHE=1 \
           --tag "$$image" \
-          --tag "${_REGISTRY}/service:latest" \
-          model
-        docker push --all-tags "${_REGISTRY}/service"
+          --tag "${_IMAGE}:latest" \
+          model/${_MODEL}
+        docker push --all-tags "${_IMAGE}"
 
 timeout: 1800s
 
 options:
-  # Lets _REGISTRY be made from other substitutions.
+  # Lets _IMAGE be made from other substitutions.
   dynamicSubstitutions: true
   # A build that runs as its own service account has to say where its logs go.
   logging: CLOUD_LOGGING_ONLY

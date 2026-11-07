@@ -1,26 +1,31 @@
-# The deploy pipeline of the model host. A merge to main that changes
-# model/Dockerfile or infra/service/ runs it, through the trigger
-# infra/platform creates; it can also be run by hand, as docs/guide.md shows. The
-# source is the whole repository.
+# The deploy pipeline of a model's host, shared by the models. A merge to main
+# that changes the model's Dockerfile, its settings in <model>.tfvars or the
+# Terraform here runs it, through that model's trigger, which infra/platform
+# creates and which passes the model's settings as the substitutions below;
+# it can also be run by hand, as docs/guide.md shows. The source is the whole
+# repository.
 #
-# It builds nothing. It waits for the service image that model/Dockerfile
-# describes, which the build pipeline, model/cloudbuild.yaml, pushes on the
-# same merge, and applies the Terraform in this directory with it: first as a
-# revision that takes no traffic, reachable under the tag "candidate", then,
-# once that revision has sent the first word of a reply to one message within
-# 60 seconds, with all traffic sent to that revision by name, so that no other
-# revision can take it in between. Otherwise the build fails and the revision
-# serving before it keeps serving.
+# It builds nothing. It waits for the service image that the model's
+# Dockerfile describes, which the build pipeline, model/cloudbuild.yaml,
+# pushes on the same merge, and applies the Terraform in this directory with
+# it, in the model's own state: first as a revision that takes no traffic,
+# reachable under the tag "candidate", then, once that revision has sent the
+# first word of a reply to one message within the model's target, with all
+# traffic sent to that revision by name, so that no other revision can take it
+# in between. Otherwise the build fails and the revision serving before it
+# keeps serving.
 #
 # Applies wait up to ten minutes for another deploy's hold on the state.
 #
 # Terraform's version here is the one .github/workflows/test.yml tests with.
 # Change both together.
 
+# _MODEL, _IMAGE_NAME, _SERVICE, _SECRET, _STATE_PREFIX and _TARGET_SECONDS
+# come from the model's trigger, and have no defaults here, so that a model's
+# deploy can never fall back on another's.
 substitutions:
   _REPOSITORY: model-host
-  _SERVICE: model-host
-  _IMAGE: ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/service
+  _IMAGE: ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}
   # Waits this many times 15 seconds for the image: 50 minutes, which is as
   # long as a build may take and then some, for a build that was queued.
   _WAITS: "200"
@@ -35,7 +40,7 @@ steps:
       - -c
       - |
         set -euo pipefail
-        tag="$$(bash model/image-tag.sh)"
+        tag="$$(bash model/image-tag.sh ${_MODEL})"
         for _ in $$(seq "${_WAITS}"); do
           if digest="$$(gcloud artifacts docker images describe "${_IMAGE}:$$tag" \
             --format 'value(image_summary.digest)' 2>/workspace/describe-error)"; then
@@ -89,8 +94,9 @@ steps:
       - -c
       - |
         set -eu
-        terraform init -input=false
+        terraform init -input=false -backend-config "prefix=${_STATE_PREFIX}"
         terraform apply -input=false -auto-approve -lock-timeout=10m \
+          -var-file ${_MODEL}.tfvars \
           -var "image=$$(cat /workspace/image)" \
           -var "revision=${_SERVICE}-${BUILD_ID}" \
           -var "serving_revision=$$(cat /workspace/serving_revision)"
@@ -108,7 +114,7 @@ steps:
       - |
         set -euo pipefail
         read -r revision url < /workspace/candidate
-        node infra/service/scripts/try-revision.js "$$url" "$$revision"
+        node infra/service/scripts/try-revision.js "$$url" "$$revision" "${_TARGET_SECONDS}"
 
   # The same image and name again, so the revision is unchanged and only its
   # traffic moves: to the revision that was tried, by name, and not to
@@ -122,13 +128,14 @@ steps:
       - |
         set -eu
         terraform apply -input=false -auto-approve -lock-timeout=10m \
+          -var-file ${_MODEL}.tfvars \
           -var "image=$$(cat /workspace/image)" \
           -var "revision=${_SERVICE}-${BUILD_ID}" \
           -var "serving_revision=${_SERVICE}-${BUILD_ID}"
 
 availableSecrets:
   secretManager:
-    - versionName: projects/${PROJECT_ID}/secrets/model-host-api-key/versions/latest
+    - versionName: projects/${PROJECT_ID}/secrets/${_SECRET}/versions/latest
       env: MODEL_HOST_API_KEY
 
 timeout: 4800s
