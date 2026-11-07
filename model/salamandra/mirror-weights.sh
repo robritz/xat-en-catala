@@ -5,7 +5,7 @@
 # checked against its SHA-256 before it is stored. Safe to run again: a file
 # already in the bucket is left as it is.
 #
-#   model/mirror-weights.sh
+#   model/salamandra/mirror-weights.sh
 
 set -euo pipefail
 
@@ -13,7 +13,7 @@ PROJECT="project-45649980-817a-462c-b12"
 BUCKET="${PROJECT}-model-weights"
 
 # The weights: the Q6_K quantisation of BSC-LT/salamandra-7b-instruct-2606.
-# model/cloudbuild-weights.yaml names the same file and revision.
+# model/salamandra/cloudbuild-weights.yaml names the same file and revision.
 WEIGHTS_REPO="mradermacher/salamandra-7b-instruct-2606-GGUF"
 WEIGHTS_REVISION="8bcd7d8d8545749ef73b3046f7cb5cd64d8c70c1"
 WEIGHTS_FILE="salamandra-7b-instruct-2606.Q6_K.gguf"

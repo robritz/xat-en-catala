@@ -20,6 +20,7 @@ override_resource {
 }
 
 variables {
+  model    = "salamandra"
   image    = "europe-west4-docker.pkg.dev/p/model-host/service@sha256:abc"
   revision = "model-host-0b6c1a5e-8f2d-4c3b-9a71-2e5d4f6a8b90"
 }
@@ -84,10 +85,6 @@ run "service_settings" {
     error_message = "The service should run the image it is given."
   }
   assert {
-    condition     = google_cloud_run_v2_service.model_host.template[0].node_selector[0].accelerator == "nvidia-l4"
-    error_message = "The service should run on an L4."
-  }
-  assert {
     condition     = google_cloud_run_v2_service.model_host.template[0].scaling[0].min_instance_count == 0 && google_cloud_run_v2_service.model_host.template[0].scaling[0].max_instance_count == 1
     error_message = "The service should scale between zero and one instance."
   }
@@ -96,13 +93,51 @@ run "service_settings" {
     error_message = "A deploy should start no instance, so that the pipeline times a real cold start."
   }
   assert {
-    condition     = google_cloud_run_v2_service.model_host.template[0].timeout == "120s"
-    error_message = "A request should be held as long as the app's chat route holds it, 120 seconds."
-  }
-  assert {
     condition     = google_cloud_run_v2_service_iam_member.anyone.member == "allUsers"
     error_message = "Anyone should be able to reach the service; the API key is the gate."
   }
+}
+
+run "salamandra_runs_on_an_l4" {
+  command = plan
+
+  assert {
+    condition     = google_cloud_run_v2_service.model_host.name == "model-host"
+    error_message = "Salamandra's service should keep its name."
+  }
+  assert {
+    condition     = google_cloud_run_v2_service.model_host.template[0].node_selector[0].accelerator == "nvidia-l4"
+    error_message = "Salamandra should run on an L4."
+  }
+  assert {
+    condition = google_cloud_run_v2_service.model_host.template[0].containers[0].resources[0].limits == tomap({
+      cpu              = "4"
+      memory           = "16Gi"
+      "nvidia.com/gpu" = "1"
+    })
+    error_message = "Salamandra should have 4 CPUs, 16 GiB and one GPU."
+  }
+  assert {
+    condition = one([
+      for e in google_cloud_run_v2_service.model_host.template[0].containers[0].env :
+      e.value_source[0].secret_key_ref[0].secret if e.name == "LLAMA_API_KEY"
+    ]) == "model-host-api-key"
+    error_message = "Salamandra's server should read its own key."
+  }
+  assert {
+    condition     = google_cloud_run_v2_service.model_host.template[0].timeout == "120s"
+    error_message = "A request should be held as long as the app's chat route holds it, 120 seconds."
+  }
+}
+
+run "an_unknown_model_is_refused" {
+  command = plan
+
+  variables {
+    model = "salamandre"
+  }
+
+  expect_failures = [var.model]
 }
 
 run "the_revision_is_named_by_whoever_applies" {

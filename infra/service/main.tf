@@ -1,27 +1,53 @@
-# The model host on Cloud Run. Every setting of the service is here. The
-# deploy pipeline, infra/service/cloudbuild.yaml, applies it twice per deploy:
+# A model host on Cloud Run. Every setting of the service is here, and what
+# differs between models is in local.models, chosen by var.model. The deploy
+# pipeline, infra/service/cloudbuild.yaml, applies it twice per deploy:
 # once keeping traffic on the serving revision while the new one is tried, and
 # once keeping it on the new one, named. Nothing in the second apply changes
 # the revision's template, so it makes no new revision.
 
+# What differs between the models' hosts. Each model's state is a workspace
+# of its own: Salamandra's is the default one, which held the only model host
+# before there were two. infra/platform's models name the same workspaces.
 locals {
+  models = {
+    salamandra = {
+      workspace = "default"
+      service   = "model-host"
+      # One NVIDIA L4, with 4 CPUs and 16 GiB.
+      gpu    = "nvidia-l4"
+      cpu    = "4"
+      memory = "16Gi"
+      # 120 seconds, against a cold start of 10 to 20.
+      timeout = "120s"
+    }
+  }
+  model = local.models[var.model]
+
   keep_serving = var.serving_revision != ""
 }
 
 resource "google_cloud_run_v2_service" "model_host" {
-  name     = "model-host"
+  name     = local.model.service
   location = var.region
   ingress  = "INGRESS_TRAFFIC_ALL"
+
+  # An apply in another model's state would replace that model's service
+  # with this one.
+  lifecycle {
+    precondition {
+      condition     = terraform.workspace == local.model.workspace
+      error_message = "${var.model}'s state is the workspace ${local.model.workspace}, not ${terraform.workspace}: run terraform workspace select ${local.model.workspace}."
+    }
+  }
 
   template {
     revision        = var.revision
     service_account = "model-host@${var.project}.iam.gserviceaccount.com"
 
-    # One NVIDIA L4 with 4 CPUs and 16 GiB, billed for as long as an instance
-    # is up, which a GPU requires. Zero to one instance caps spend at one GPU
-    # and costs nothing when idle.
+    # One GPU, billed for as long as an instance is up, which a GPU requires.
+    # Zero to one instance caps spend at one GPU and costs nothing when idle.
     node_selector {
-      accelerator = "nvidia-l4"
+      accelerator = local.model.gpu
     }
     gpu_zonal_redundancy_disabled = true
     scaling {
@@ -33,9 +59,8 @@ resource "google_cloud_run_v2_service" "model_host" {
     max_instance_request_concurrency = 4
 
     # Matches the app's chat route, which holds a request open through a cold
-    # start: 120 seconds, against a cold start of 10 to 20. Change both
-    # together.
-    timeout = "120s"
+    # start. Change both together.
+    timeout = local.model.timeout
 
     # A deploy starts no instance: the first request to a revision does, so
     # the pipeline can time a real cold start, and its message, not this
@@ -52,8 +77,8 @@ resource "google_cloud_run_v2_service" "model_host" {
 
       resources {
         limits = {
-          cpu              = "4"
-          memory           = "16Gi"
+          cpu              = local.model.cpu
+          memory           = local.model.memory
           "nvidia.com/gpu" = "1"
         }
         cpu_idle = false
@@ -65,7 +90,7 @@ resource "google_cloud_run_v2_service" "model_host" {
         name = "LLAMA_API_KEY"
         value_source {
           secret_key_ref {
-            secret  = "model-host-api-key"
+            secret  = "${local.model.service}-api-key"
             version = "latest"
           }
         }

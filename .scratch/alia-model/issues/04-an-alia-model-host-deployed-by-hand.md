@@ -21,3 +21,8 @@ See `docs/specs/alia-model.md`, sections "Weights and GPU", "Images", "The servi
 - [ ] The cold start is measured at least three times from zero instances, and recorded in this ticket with how it splits between fetching the image, loading the weights and the reply starting, as far as the logs show.
 - [ ] If the cold start is far over three minutes, that is reported to the owner, with the Q6_K fallback, before ticket 05 starts.
 - [ ] The guide describes ALIA's image and how to deploy it by hand.
+
+## Notes from ticket 02
+
+- ALIA's service settings go in `models` in the service's Terraform, with the workspace `alia`, and in infra/platform's `models` under the same service name and workspace.
+- The service refuses to plan a model outside its own workspace, and `terraform test` always plans in the default workspace. A run for ALIA can therefore only expect that failure, not assert ALIA's settings. Find a way to test ALIA's values that does not loosen the guard, or say in this ticket why they are left to the first apply.

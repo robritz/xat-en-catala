@@ -9,7 +9,8 @@ terraform {
   }
 
   # The bucket is created by infra/platform, which keeps its own state beside
-  # this one under another prefix.
+  # this one under another prefix. Each model's host has a workspace of its
+  # own under this prefix: see local.models.
   backend "gcs" {
     bucket = "project-45649980-817a-462c-b12-tfstate"
     prefix = "service"

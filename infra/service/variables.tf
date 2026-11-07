@@ -10,6 +10,16 @@ variable "region" {
   default     = "europe-west4"
 }
 
+variable "model" {
+  description = "The model whose host this is, one of local.models: salamandra."
+  type        = string
+
+  validation {
+    condition     = contains(keys(local.models), var.model)
+    error_message = "Name a model in local.models."
+  }
+}
+
 variable "image" {
   description = "The service image to run. The deploy pipeline names it by digest."
   type        = string
@@ -30,8 +40,8 @@ variable "revision" {
   type        = string
 
   validation {
-    condition     = can(regex("^model-host-[a-z0-9-]+$", var.revision))
-    error_message = "Name the revision model-host- followed by lowercase letters, digits and dashes."
+    condition     = can(regex("^${local.models[var.model].service}-[a-z0-9-]+$", var.revision)) && !anytrue([for name, m in local.models : name != var.model && length(m.service) > length(local.models[var.model].service) && startswith(var.revision, "${m.service}-")])
+    error_message = "Name the revision after the model's service, followed by a dash and lowercase letters, digits and dashes, and not after another model's service."
   }
 }
 
