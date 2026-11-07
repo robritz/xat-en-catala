@@ -209,7 +209,7 @@ describe("POST /api/chat", () => {
 
   test("returns 502 when the model isn't configured", async () => {
     vi.mocked(chatModel).mockImplementation(() => {
-      throw new Error("MODEL_HOST_URL and MODEL_HOST_API_KEY must be set");
+      throw new Error("SALAMANDRA_HOST_URL must be set");
     });
     const res = await postChat(post("/api/chat", { messages }));
     expect(res.status).toBe(502);

@@ -23,26 +23,28 @@ npm run dev
 
 Open http://localhost:3000.
 
-| Variable             | Description                                                     |
-| -------------------- | --------------------------------------------------------------- |
-| `MODEL_HOST_URL`     | Base URL of the model host's OpenAI-compatible API. For Cloud Run, the service's URL followed by `/v1` (see "The service") |
-| `MODEL_HOST_API_KEY` | The key the model host checks. For Cloud Run, the one in Secret Manager's `model-host-api-key` |
-| `CHAT_SECRET_PHRASE` | Phrase users must type to unlock the chat (see below)           |
-| `MODEL_NAME`         | Optional. The name the model host serves the model under, if it isn't `BSC-LT/salamandra-7b-instruct-2606` |
+| Variable                  | Description                                                     |
+| ------------------------- | --------------------------------------------------------------- |
+| `MODEL`                   | Optional. The model that writes replies, for every learner: `salamandra` or `alia`. Defaults to `salamandra`. Any other value fails the first request |
+| `SALAMANDRA_HOST_URL`     | Base URL of Salamandra's model host's OpenAI-compatible API. For Cloud Run, the service's URL followed by `/v1` (see "The service"). Needed when Salamandra is chosen |
+| `SALAMANDRA_HOST_API_KEY` | The key Salamandra's model host checks. For Cloud Run, the one in Secret Manager's `model-host-api-key`. Needed when Salamandra is chosen |
+| `ALIA_HOST_URL`           | Base URL of ALIA's model host's OpenAI-compatible API. Needed when ALIA is chosen |
+| `ALIA_HOST_API_KEY`       | The key ALIA's model host checks. Needed when ALIA is chosen |
+| `CHAT_SECRET_PHRASE`      | Phrase users must type to unlock the chat (see below)           |
 | `TTS_API_URL`        | Optional. Base URL of the [Matxa-TTS API](https://github.com/robritz/matxa-tts-api) that speaks replies (see below). Defaults to `http://localhost:8000` |
 
-All are read only on the server, so the API key never reaches the browser. Pointing the app at another model host is a change of these variables alone. `.env.local` is git-ignored.
+All are read only on the server, so the API key never reaches the browser. Switching models, or pointing a model at another host, is a change of these variables alone. `.env.local` is git-ignored.
 
 ## How it works
 
 ```
-Browser ──POST /api/chat──▶ Next.js ──POST <MODEL_HOST_URL>/chat/completions──▶ Model host (Cloud Run)
+Browser ──POST /api/chat──▶ Next.js ──POST <chosen model's host URL>/chat/completions──▶ Model host (Cloud Run)
         ◀── UI message stream ──    ◀── OpenAI-format token stream ───────────
 ```
 
 - The browser uses the AI SDK's `useChat` hook, which sends the whole conversation on every message. The server keeps only the user and assistant text, adds the system prompt, and calls the model with `streamText` through the model host's OpenAI-compatible API.
 - The toggle button to the left of the input switches translation on and off. While it is on, what you enter is translated into Catalan as-is instead of answered, e.g. "Where do you live?" gets "On vius?"; while it is off, it is handled as a normal chat message. The browser marks such a message in its metadata, and the server sends only that text to the model, without the rest of the conversation, with a translation prompt in place of the usual system prompt. The model is too small to tell a text to translate from one to answer from the system prompt alone.
-- Every request carries a temperature of 1 and a top-p of 1, set in `src/lib/model-host.ts`. Sending them keeps sampling the app's to decide, whichever engine the model host runs.
+- Every request carries the chosen model's sampling, set beside its host's variables and the name its host serves it under in `src/lib/model-host.ts`: a temperature of 1 and a top-p of 1 for Salamandra, and a temperature of 0.1 and a top-p of 1 for ALIA, as BSC advises. Sending them keeps sampling the app's to decide, whichever engine the model host runs.
 - The reply is streamed back and shown as it is written. Until the first words arrive, the UI shows "Pensant…".
 - The model reads at most 8,192 tokens of conversation and reply together on the Cloud Run model host. A reply that runs into that limit is cut off where it stands, and the UI says so under it and suggests a new conversation. A conversation that is already over the limit gets no reply, only "Error: Upstream error".
 - Each reply ends with the tokens the model read and wrote for it, as the model host counted them. The browser keeps a running count for the conversation, which any component can read with `useTokenUsage`: how long the conversation is, which is what fills the model's context window, and the totals read and written. "Nova conversa" starts the count afresh. Nothing shows it yet.
@@ -99,7 +101,7 @@ openssl rand -hex 32 | tr -d '\n' |
   gcloud secrets versions add model-host-api-key --project <project> --data-file -
 ```
 
-To read it, for the app's `MODEL_HOST_API_KEY`, run `gcloud secrets versions access latest --secret model-host-api-key`.
+To read it, for the app's `SALAMANDRA_HOST_API_KEY`, run `gcloud secrets versions access latest --secret model-host-api-key`.
 
 ### The weights
 
@@ -197,7 +199,7 @@ That keeps the latest revision as it is. A change to a setting needs a new revis
 
 An apply starts no instance, so it does not show whether the revision serves. The first request does that.
 
-To point the app at the service, set `MODEL_HOST_URL` to `terraform -chdir=infra/service output -raw url` followed by `/v1`, and `MODEL_HOST_API_KEY` to the key.
+To point the app at the service, set `SALAMANDRA_HOST_URL` to `terraform -chdir=infra/service output -raw url` followed by `/v1`, and `SALAMANDRA_HOST_API_KEY` to the key.
 
 `infra/service/scripts/time-reply.js` sends the model host one message and prints, as one line of JSON, how long the first word of the reply took, which is the cold start when no instance was running:
 

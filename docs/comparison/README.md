@@ -12,7 +12,7 @@ A fixed set of messages for telling whether one **model host** answers as well a
 
 ## Replaying the set against a host
 
-1. Point the app at the host: set `MODEL_HOST_URL` and `MODEL_HOST_API_KEY` in `.env.local`, and start it with `npm run dev`.
+1. Point the app at the host: set `MODEL` and the chosen model's `*_HOST_URL` and `*_HOST_API_KEY` in `.env.local`, and start it with `npm run dev`.
 2. Make sure the host is awake, or the first message waits through a cold start.
 3. Run the script from the repository root and keep what it prints. The name given only labels the output, so give the name of the host the app is pointed at:
 
