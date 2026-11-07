@@ -58,6 +58,10 @@ The period from the model being woken on page load until the page is closed.
 The wait from a message reaching the model while nothing is running to serve it until the first word of the reply.
 _Avoid_: Warm-up, boot time, spin-up
 
+**Model**:
+The language model that writes replies: Salamandra or ALIA. One model serves every learner at a time, chosen by the owner. Each model runs on a model host of its own.
+_Avoid_: LLM, engine, backend
+
 **Model host**:
-A service that runs the model and answers the chat's requests to it.
+A service that runs one model and answers the chat's requests to it.
 _Avoid_: Endpoint, backend, provider, inference server
