@@ -1,6 +1,7 @@
 // Sends the comparison messages to a running copy of the app, one at a time,
 // and prints its replies as Markdown. The app decides which model host
-// answers, by its MODEL_HOST_URL; the name given here only labels the output.
+// answers, by its MODEL and host variables; the name given here only labels
+// the output.
 // See README.md beside this file.
 
 import { readFile } from "node:fs/promises";

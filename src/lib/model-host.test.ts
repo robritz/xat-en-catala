@@ -8,8 +8,11 @@ const fetchMock = vi.fn();
 beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
-  vi.stubEnv("MODEL_HOST_URL", "https://model-host.example/v1");
-  vi.stubEnv("MODEL_HOST_API_KEY", "test-key");
+  vi.stubEnv("MODEL", "");
+  vi.stubEnv("SALAMANDRA_HOST_URL", "https://model-host.example/v1");
+  vi.stubEnv("SALAMANDRA_HOST_API_KEY", "test-key");
+  vi.stubEnv("ALIA_HOST_URL", "");
+  vi.stubEnv("ALIA_HOST_API_KEY", "");
 });
 
 async function sentRequest() {
@@ -23,16 +26,26 @@ async function sentRequest() {
 }
 
 describe("chatModel", () => {
-  test("calls the model host's OpenAI-compatible API with the API key", async () => {
+  test.each([
+    ["no model is chosen", ""],
+    ["Salamandra is chosen", "salamandra"],
+  ])("calls Salamandra's model host with its API key, name and sampling when %s", async (_, model) => {
+    vi.stubEnv("MODEL", model);
     const { url, headers, body } = await sentRequest();
     expect(url).toBe("https://model-host.example/v1/chat/completions");
     expect(headers.get("authorization")).toBe("Bearer test-key");
-    expect(body.model).toBe("BSC-LT/salamandra-7b-instruct-2606");
+    expect(body).toMatchObject({ model: "BSC-LT/salamandra-7b-instruct-2606", temperature: 1, top_p: 1 });
   });
 
-  test("uses MODEL_NAME when the model host serves the model under another name", async () => {
-    vi.stubEnv("MODEL_NAME", "salamandra");
-    expect((await sentRequest()).body.model).toBe("salamandra");
+  // BSC advises a temperature of 0 to 0.2 for ALIA.
+  test("calls ALIA's model host with its API key, name and sampling when ALIA is chosen", async () => {
+    vi.stubEnv("MODEL", "alia");
+    vi.stubEnv("ALIA_HOST_URL", "https://alia.example/v1");
+    vi.stubEnv("ALIA_HOST_API_KEY", "alia-key");
+    const { url, headers, body } = await sentRequest();
+    expect(url).toBe("https://alia.example/v1/chat/completions");
+    expect(headers.get("authorization")).toBe("Bearer alia-key");
+    expect(body).toMatchObject({ model: "BSC-LT/ALIA-40b-instruct-2601", temperature: 0.1, top_p: 1 });
   });
 
   // The model host counts the tokens of a streamed reply only when asked to.
@@ -63,9 +76,26 @@ describe("chatModel", () => {
     expect(body).toMatchObject({ temperature: 1, top_p: 1 });
   });
 
-  test.each(["MODEL_HOST_URL", "MODEL_HOST_API_KEY"])("throws when %s is missing", (name) => {
+  // A typo must not quietly send every learner to another model.
+  test("throws naming an unknown model and the ones there are", () => {
+    vi.stubEnv("MODEL", "salamandre");
+    expect(() => chatModel()).toThrow('MODEL is "salamandre", but must be one of: salamandra, alia');
+  });
+
+  test.each(["ALIA_HOST_URL", "ALIA_HOST_API_KEY"])(
+    "throws naming %s when ALIA is chosen and it is missing, even with Salamandra's set",
+    (name) => {
+      vi.stubEnv("MODEL", "alia");
+      vi.stubEnv("ALIA_HOST_URL", "https://alia.example/v1");
+      vi.stubEnv("ALIA_HOST_API_KEY", "alia-key");
+      vi.stubEnv(name, "");
+      expect(() => chatModel()).toThrow(`${name} must be set`);
+    },
+  );
+
+  test.each(["SALAMANDRA_HOST_URL", "SALAMANDRA_HOST_API_KEY"])("throws naming %s when it is missing", (name) => {
     vi.stubEnv(name, "");
-    expect(() => chatModel()).toThrow("MODEL_HOST_URL and MODEL_HOST_API_KEY must be set");
+    expect(() => chatModel()).toThrow(`${name} must be set`);
   });
 });
 
