@@ -7,7 +7,7 @@ The weights are BSC's Q8_0 conversion, `ALIA-40b-instruct-2601-Q8_0.gguf`, 42,96
 See `docs/specs/alia-model.md`, sections "Weights and GPU", "Names" and "Images", and `docs/adr/0003-alia-q8-on-rtx-pro-6000.md`.
 
 **Needs the owner:**
-- RTX PRO 6000 quota in `europe-west4`, enough for two GPUs, is requested by hand in the console. Tell the owner where, and confirm it is granted before ticket 04.
+- No GPU quota is requested: Cloud Run grants three RTX PRO 6000 GPUs without zonal redundancy when the first service with one is deployed in a region, which ticket 04 does.
 - The platform apply creates billable resources. Show the plan and wait for a go.
 - The key is added to the secret with gcloud, the mirror is run and the weights image is built by the owner, or with their go for each.
 
@@ -20,5 +20,4 @@ See `docs/specs/alia-model.md`, sections "Weights and GPU", "Names" and "Images"
 - [ ] ALIA's mirror script, in ALIA's directory, fetches the file at the pinned revision, checks its SHA-256, and stores it in the weights bucket only if it matches. Run again, it finds the file and exits cleanly.
 - [ ] ALIA's weights image build reads the file from the bucket, with a disk and timeout large enough for 43 GB, and pushes an image holding only that file, tagged with the quantisation and revision.
 - [ ] The file in the bucket has the size Hugging Face records, and the weights image is in the registry.
-- [ ] The quota for two RTX PRO 6000 GPUs in `europe-west4` is granted.
 - [ ] The guide describes ALIA's secret, mirror and weights build alongside Salamandra's.

@@ -134,7 +134,7 @@ gcloud builds submit --no-source \
   --service-account projects/<project>/serviceAccounts/model-host-build@<project>.iam.gserviceaccount.com
 ```
 
-ALIA runs on an NVIDIA RTX PRO 6000, which needs Cloud Run quota in `europe-west4` that the project does not have by default. It is requested once, in the console under IAM & Admin, Quotas, for Cloud Run's "Total Nvidia RTX Pro 6000 GPU allocation, in milli GPU, without zonal redundancy, per project per region" in `europe-west4`, since the service turns zonal redundancy off. Ask for 2,000, which is two GPUs: a deploy holds one for the new revision and one for the old for a moment.
+ALIA runs on an NVIDIA RTX PRO 6000. Cloud Run grants a project 3,000 milli GPU of it without zonal redundancy, three GPUs, when its first service with one is deployed in a region, so no quota is requested by hand. A deploy needs two for a moment: one for the new revision and one for the old. More is requested on the console's Quotas page, for `run.googleapis.com/nvidia_rtx_pro_6000_gpu_allocation_no_zonal_redundancy` in `europe-west4`, once it has been granted.
 
 ### The service image
 
