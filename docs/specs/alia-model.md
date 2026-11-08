@@ -133,6 +133,6 @@ Whether ALIA is good enough to switch to is the owner's judgement and is not par
 ## Further Notes
 
 - Where the app itself is hosted is not recorded in this repository. If that platform caps a route's time limit, the cap is the ceiling for ALIA's cold-start target, and is checked before the target is set.
-- The RTX PRO 6000 needs quota in `europe-west4`, which the owner requests by hand before the first deploy. During a deploy, a new revision and the old one each hold a GPU for a moment, so the quota has to allow two.
+- Cloud Run grants a project three RTX PRO 6000 GPUs without zonal redundancy when its first service with one is deployed in a region, so no quota is requested by hand. During a deploy, a new revision and the old one each hold a GPU for a moment, so two are needed.
 - Salamandra's image starts in 10 to 20 seconds from 6.4 GB, almost all of it loading the weights. Nobody has yet seen how Cloud Run fetches and loads a 43 GB image, so the first measurement may change the plan.
 - An idle RTX PRO 6000 instance, which Cloud Run keeps for a while after the last request, costs several times what an idle L4 does.
