@@ -42,6 +42,16 @@ locals {
       workspace      = "default"
       target_seconds = 60
     }
+    # ALIA's slowest cold start was 30.5 seconds, on a revision's first
+    # instance. Its target is about three times that, as Salamandra's 60 is
+    # to its 20.
+    alia = {
+      image          = "alia"
+      service        = "model-host-alia"
+      secret         = google_secret_manager_secret.alia_api_key.secret_id
+      workspace      = "alia"
+      target_seconds = 90
+    }
   }
 }
 

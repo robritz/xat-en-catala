@@ -2,7 +2,10 @@
 // and waits for the first word of the reply. infra/service/cloudbuild.yaml
 // runs it before it sends traffic to the revision.
 //
-//   MODEL_HOST_API_KEY=<key> node infra/service/scripts/try-revision.js <tag URL> <revision> <target seconds>
+//   MODEL_HOST_API_KEY=<key> node infra/service/scripts/try-revision.js <tag URL> <revision> <target seconds> <Dockerfile>
+//
+// The message asks for the model by the name the model's Dockerfile serves
+// it under.
 //
 // The revision has never run, so the wait is its cold start. It prints that as
 // one line of JSON, e.g.
@@ -12,22 +15,25 @@
 // and exits with 1, naming what went wrong, if no word came within the target,
 // which is the model's: infra/platform's models hold it.
 
+import { readFileSync } from "node:fs";
 import { timeFirstWord } from "./cold-start.js";
 import { streamReply } from "./reply-stream.js";
+import { servedName } from "./served-name.js";
 
-const [tagUrl, revision, target] = process.argv.slice(2);
+const [tagUrl, revision, target, dockerfile] = process.argv.slice(2);
 const targetSeconds = Number(target);
 const key = process.env.MODEL_HOST_API_KEY;
-if (!tagUrl || !revision || !(targetSeconds > 0) || !key) {
+if (!tagUrl || !revision || !(targetSeconds > 0) || !dockerfile || !key) {
   console.error(
-    "Usage: MODEL_HOST_API_KEY=<key> node infra/service/scripts/try-revision.js <tag URL> <revision> <target seconds>",
+    "Usage: MODEL_HOST_API_KEY=<key> node infra/service/scripts/try-revision.js <tag URL> <revision> <target seconds> <Dockerfile>",
   );
   process.exit(1);
 }
+const model = servedName(readFileSync(dockerfile, "utf8"));
 
 const signal = AbortSignal.timeout(targetSeconds * 1000);
 const { seconds, failure } = await timeFirstWord({
-  replies: streamReply(tagUrl, key, signal),
+  replies: streamReply(tagUrl, key, signal, model),
   signal,
   targetSeconds,
 });

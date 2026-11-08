@@ -57,6 +57,28 @@ run "each_model_builds_and_deploys_only_on_its_own_changes" {
     condition     = toset(google_cloudbuild_trigger.deploy["salamandra"].included_files) == toset(["model/salamandra/Dockerfile", "infra/service/*.tf"])
     error_message = "Salamandra should deploy only when its image or the service changes."
   }
+  assert {
+    condition     = google_cloudbuild_trigger.build["alia"].included_files == tolist(["model/alia/**"])
+    error_message = "ALIA should build only when its directory changes."
+  }
+  assert {
+    condition     = toset(google_cloudbuild_trigger.deploy["alia"].included_files) == toset(["model/alia/Dockerfile", "infra/service/*.tf"])
+    error_message = "ALIA should deploy only when its image or the service changes."
+  }
+}
+
+# ALIA's triggers are named after its service, beside Salamandra's.
+run "alia_has_triggers_of_its_own" {
+  command = plan
+
+  assert {
+    condition     = google_cloudbuild_trigger.build["alia"].name == "model-host-alia-build" && google_cloudbuild_trigger.deploy["alia"].name == "model-host-alia-deploy"
+    error_message = "ALIA's triggers should be named after its service."
+  }
+  assert {
+    condition     = google_cloudbuild_trigger.build["alia"].filename == "model/cloudbuild.yaml" && google_cloudbuild_trigger.deploy["alia"].filename == "infra/service/cloudbuild.yaml"
+    error_message = "ALIA's triggers should run the shared pipelines."
+  }
 }
 
 run "each_model_passes_its_settings_to_the_pipelines" {
@@ -79,6 +101,24 @@ run "each_model_passes_its_settings_to_the_pipelines" {
       _TARGET_SECONDS = "60"
     })
     error_message = "Salamandra's deploy should be told its service, secret, workspace and a 60-second target."
+  }
+  assert {
+    condition = google_cloudbuild_trigger.build["alia"].substitutions == tomap({
+      _MODEL      = "alia"
+      _IMAGE_NAME = "alia"
+    })
+    error_message = "ALIA's build should be told its directory and image name."
+  }
+  assert {
+    condition = google_cloudbuild_trigger.deploy["alia"].substitutions == tomap({
+      _MODEL          = "alia"
+      _IMAGE_NAME     = "alia"
+      _SERVICE        = "model-host-alia"
+      _SECRET         = "model-host-alia-api-key"
+      _WORKSPACE      = "alia"
+      _TARGET_SECONDS = "90"
+    })
+    error_message = "ALIA's deploy should be told its service, secret, workspace and a 90-second target."
   }
 }
 
@@ -131,5 +171,9 @@ run "alia_has_its_own_key" {
   assert {
     condition     = google_secret_manager_secret_iam_member.service_reads_alia_key.role == "roles/secretmanager.secretAccessor" && google_secret_manager_secret_iam_member.service_reads_alia_key.member == google_service_account.service.member
     error_message = "The model hosts' service account should read ALIA's key."
+  }
+  assert {
+    condition     = google_secret_manager_secret_iam_member.deploy_reads_alia_key.secret_id == google_secret_manager_secret.alia_api_key.id && google_secret_manager_secret_iam_member.deploy_reads_alia_key.role == "roles/secretmanager.secretAccessor" && google_secret_manager_secret_iam_member.deploy_reads_alia_key.member == google_service_account.deploy.member
+    error_message = "The deploy pipeline should read ALIA's key, to send a new revision its message."
   }
 }
