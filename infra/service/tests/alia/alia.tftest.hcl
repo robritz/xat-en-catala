@@ -42,12 +42,12 @@ run "alia_runs_on_an_rtx_pro_6000" {
     error_message = "ALIA's server should read its own key."
   }
   assert {
-    condition     = google_cloud_run_v2_service.model_host.template[0].timeout == "900s"
-    error_message = "A request to ALIA should be held for 900 seconds."
+    condition     = google_cloud_run_v2_service.model_host.template[0].timeout == "180s"
+    error_message = "A request to ALIA should be held as long as the app's chat route holds it, 180 seconds."
   }
   assert {
-    condition     = google_cloud_run_v2_service.model_host.template[0].containers[0].startup_probe[0].failure_threshold == 900
-    error_message = "ALIA's instance should have fifteen minutes to load its weights."
+    condition     = google_cloud_run_v2_service.model_host.template[0].containers[0].startup_probe[0].failure_threshold == 300
+    error_message = "ALIA's instance should have five minutes to load its weights."
   }
 }
 

@@ -71,8 +71,8 @@ resource "google_storage_bucket_iam_member" "build_reads_weights" {
 # The deploy pipeline reads the image the build pushed and applies
 # infra/service, keeping its state in the state bucket. That includes opening
 # the service to unauthenticated requests, and running it as the service's
-# account and no other. It reads the key, to send a new revision its test
-# message. It builds nothing.
+# account and no other. It reads the models' keys, to send a new revision
+# its test message. It builds nothing.
 
 resource "google_project_iam_member" "deploy_project_roles" {
   for_each = toset(concat(local.pipeline_roles, ["roles/run.admin"]))
@@ -103,6 +103,14 @@ resource "google_service_account_iam_member" "deploy_acts_as_service" {
 
 resource "google_secret_manager_secret_iam_member" "deploy_reads_key" {
   secret_id = google_secret_manager_secret.api_key.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = google_service_account.deploy.member
+}
+
+# Each deploy sends a new revision one message with its model's key, so the
+# deploy pipeline reads ALIA's key too.
+resource "google_secret_manager_secret_iam_member" "deploy_reads_alia_key" {
+  secret_id = google_secret_manager_secret.alia_api_key.id
   role      = "roles/secretmanager.secretAccessor"
   member    = google_service_account.deploy.member
 }

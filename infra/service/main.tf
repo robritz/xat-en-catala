@@ -30,12 +30,11 @@ locals {
       gpu    = "nvidia-rtx-pro-6000"
       cpu    = "20"
       memory = "80Gi"
-      # Long enough for any cold start a first deploy by hand might see. It
-      # is to be set from the measured one, with the chat route's time limit.
-      timeout = "900s"
-      # Fifteen minutes to load 43 GB of weights, a guess until a cold start
-      # is measured. Cloud Run allows a GPU's instance up to 30.
-      startup_seconds = 900
+      # 180 seconds. A cold start takes 18 to 31, and a deploy fails a
+      # revision that takes more than 90.
+      timeout = "180s"
+      # Five minutes to load 43 GB of weights, which takes 13 to 25 seconds.
+      startup_seconds = 300
     }
   }
   model = local.models[var.model]
@@ -47,6 +46,14 @@ resource "google_cloud_run_v2_service" "model_host" {
   name     = local.model.service
   location = var.region
   ingress  = "INGRESS_TRAFFIC_ALL"
+
+  # A new image's revision is ready only once Cloud Run has imported the
+  # image, which took ALIA's 43 GB about 11 minutes, near the provider's
+  # default of 20.
+  timeouts {
+    create = "45m"
+    update = "45m"
+  }
 
   # An apply in another model's state would replace that model's service
   # with this one.
@@ -75,8 +82,8 @@ resource "google_cloud_run_v2_service" "model_host" {
     # Four requests at once matches the four replies the server runs at once.
     max_instance_request_concurrency = 4
 
-    # Matches the app's chat route, which holds a request open through a cold
-    # start. Change both together.
+    # The app's chat route holds a request open through a cold start for as
+    # long as the slower model's timeout, ALIA's. Change them together.
     timeout = local.model.timeout
 
     # A deploy starts no instance: the first request to a revision does, so

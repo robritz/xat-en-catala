@@ -6,9 +6,10 @@ import type { ReplyUsage } from "@/lib/token-usage";
 import { isUnlocked } from "@/lib/unlock";
 
 // The request stays open while a cold instance starts, which takes 10 to 20
-// seconds on Cloud Run. The limit is well above that; the service's request
-// timeout in infra/service/main.tf matches it, and changes with it.
-export const maxDuration = 120;
+// seconds for Salamandra and 18 to 31 for ALIA on Cloud Run. One limit serves
+// both models, so it follows the slower: it matches ALIA's request timeout in
+// infra/service/main.tf, and changes with it. Vercel caps it at 300 seconds.
+export const maxDuration = 180;
 
 export async function POST(request: Request) {
   if (!(await isUnlocked())) {

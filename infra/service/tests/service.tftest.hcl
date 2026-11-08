@@ -126,7 +126,7 @@ run "salamandra_runs_on_an_l4" {
   }
   assert {
     condition     = google_cloud_run_v2_service.model_host.template[0].timeout == "120s"
-    error_message = "A request should be held as long as the app's chat route holds it, 120 seconds."
+    error_message = "A request to Salamandra should be held for 120 seconds, against a cold start of 10 to 20."
   }
   assert {
     condition     = google_cloud_run_v2_service.model_host.template[0].containers[0].startup_probe[0].failure_threshold == 240

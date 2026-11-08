@@ -50,7 +50,7 @@ Browser ──POST /api/chat──▶ Next.js ──POST <chosen model's host UR
 - Each reply ends with the tokens the model read and wrote for it, as the model host counted them. The browser keeps a running count for the conversation, which any component can read with `useTokenUsage`: how long the conversation is, which is what fills the model's context window, and the totals read and written. "Nova conversa" starts the count afresh. Nothing shows it yet.
 - The server logs the same counts for each reply as one line of JSON, e.g. `{"event":"reply_tokens","inputTokens":212,"outputTokens":48,"translation":false}`. It shows in the `next dev` terminal and in your host's logs, where it can be filtered by `reply_tokens`.
 - The Cloud Run model host scales to zero when idle. **The first request after idle time takes about 10–20 seconds** while an instance starts and loads the weights, and the request stays open for all of that time. To absorb that wait up front, each page load begins with an "Iniciar la sessió" button. It sends a hidden message to wake the model, asking it to say hello and share a random fact about Catalonia, and the UI shows a spinner, announced to screen readers as "La IA s'està despertant. Un moment, si us plau.", until the greeting comes back; only then is the chat enabled. After that the message is never shown again; a slow reply later in the session just shows "Pensant…". To avoid cold starts, set `min_instance_count` to 1 in `infra/service/main.tf`; that instance and its GPU are billed while idle. How long an idle instance is kept before it is shut down is Cloud Run's to decide.
-- Because the request stays open during a cold start, `/api/chat` sets `maxDuration` to 120 seconds, well above it, and the service's request timeout in `infra/service/main.tf` matches it. If your host caps function time below the cold start, the session start fails with an error and can be retried once the instance is up.
+- Because the request stays open during a cold start, `/api/chat` sets `maxDuration` to 180 seconds. One limit serves both models, so it follows the slower, ALIA, whose cold start is 18 to 31 seconds and whose request timeout in `infra/service/main.tf` matches it. Vercel caps it at 300 seconds on every plan. If your host caps function time below the cold start, the session start fails with an error and can be retried once the instance is up.
 
 ## The model host on Cloud Run
 
@@ -71,9 +71,9 @@ The commands below need `gcloud`, signed in as someone who can create these reso
 - a bucket for the weights, `<project>-model-weights`, and one for the Terraform state, `<project>-tfstate`, private and in the same region;
 - a service account for the model hosts, `model-host`, which can read their API keys and nothing else;
 - a service account for the build pipeline, `model-host-build`, which can push images to the repository, read the weights bucket, fetch this repository from GitHub and write build logs;
-- a service account for the deploy pipeline, `model-host-deploy`, which can read images, deploy to Cloud Run as the service's account, keep the Terraform state, read the API key, fetch this repository from GitHub and write build logs;
+- a service account for the deploy pipeline, `model-host-deploy`, which can read images, deploy to Cloud Run as the service's account, keep the Terraform state, read both models' API keys, fetch this repository from GitHub and write build logs;
 - a secret in Secret Manager for each model host's API key: `model-host-api-key` for Salamandra's and `model-host-alia-api-key` for ALIA's;
-- a connection to GitHub through Developer Connect, `github`, a link to this repository through it, and the two triggers, `model-host-build` and `model-host-deploy`.
+- a connection to GitHub through Developer Connect, `github`, a link to this repository through it, and each model's two triggers: `model-host-build` and `model-host-deploy` for Salamandra, `model-host-alia-build` and `model-host-alia-deploy` for ALIA.
 
 It is applied by hand:
 
@@ -151,24 +151,20 @@ The server checks an API key on every request except its health route. It reads 
 
 The Dockerfile alone decides what the image holds, so the image is tagged with the start of its checksum, which `model/image-tag.sh salamandra` prints. Both pipelines use it: the build to name the image it pushes, the deploy to find it. The Dockerfile's comments still name the weights build and mirror script at their old places under `model/`, since changing them would change the tag; they are corrected the next time the Dockerfile changes.
 
-The build pipeline runs with a 300 GB disk and a two-hour timeout, for ALIA's 43 GB layer, which Salamandra's builds get too since the pipeline is shared. Until ALIA has a trigger of its own, its service image is built by hand, which pushes `alia:<tag>` and `alia:latest`:
-
-```bash
-gcloud builds submit --config model/cloudbuild.yaml \
-  --project <project> --region europe-west4 \
-  --substitutions _MODEL=alia,_IMAGE_NAME=alia \
-  --service-account projects/<project>/serviceAccounts/model-host-build@<project>.iam.gserviceaccount.com \
-  --gcs-source-staging-dir gs://<project>-model-weights/source
-```
+The build pipeline runs with a 300 GB disk and a two-hour timeout, for ALIA's 43 GB layer, which Salamandra's builds get too since the pipeline is shared. ALIA's image is `alia:<tag>`, with `alia:latest` as its cache. Its first build, with no cache, took an hour.
 
 ### Deploying on a merge
 
-Each model has a build trigger and a deploy trigger of its own, which run the two shared pipelines with the model's settings as substitutions. The settings are in `models` in `infra/platform/pipelines.tf`: the model's image and service names, its key's secret, its Terraform workspace, and the cold start a new revision has to beat. A merge to `main` starts either of Salamandra's pipelines, or both, with nobody involved:
+Each model has a build trigger and a deploy trigger of its own, which run the two shared pipelines with the model's settings as substitutions. The settings are in `models` in `infra/platform/pipelines.tf`: the model's image and service names, its key's secret, its Terraform workspace, and the cold start a new revision has to beat. A merge to `main` starts any of them, with nobody involved, and a model's own changes start only its own:
 
 | Pipeline | Trigger | Runs on a merge that changes | Does |
 | -------- | ------- | ---------------------------- | ---- |
 | Build | `model-host-build` | anything under `model/salamandra/` | `model/cloudbuild.yaml`: builds the service image and pushes it as `service:<tag>`, and again as `service:latest`, which the next build reads as its cache. If `service:<tag>` is already pushed, it builds nothing |
 | Deploy | `model-host-deploy` | `model/salamandra/Dockerfile` or the Terraform in `infra/service/` | `infra/service/cloudbuild.yaml`: deploys the image, as below |
+| Build | `model-host-alia-build` | anything under `model/alia/` | `model/cloudbuild.yaml`, for ALIA: `alia:<tag>` and `alia:latest` |
+| Deploy | `model-host-alia-deploy` | `model/alia/Dockerfile` or the Terraform in `infra/service/` | `infra/service/cloudbuild.yaml`, for ALIA |
+
+A change to the Terraform in `infra/service/` deploys both models, since it may change either.
 
 A merge that changes none of these starts nothing, and a change to the shared pipelines or `model/image-tag.sh` alone starts nothing either.
 
@@ -176,10 +172,10 @@ A trigger passes its substitutions to whatever version of the pipeline the merge
 
 The deploy pipeline runs as its own service account and:
 
-1. waits for `service:<tag>`, which the build pipeline pushes on the same merge. It gives up after 50 minutes, by which time the build has finished or failed;
+1. waits for `service:<tag>`, which the build pipeline pushes on the same merge. It gives up after 130 minutes, by which time even ALIA's build has finished or failed;
 2. applies `infra/service` for the model, in the model's workspace, with that image as a revision that takes no traffic, reachable under the tag `candidate`. The revision that was serving keeps all traffic. No instance is started for the new one;
-3. sends that revision one message, with the key from Secret Manager, through `infra/service/scripts/try-revision.js`, and waits for the first word of the reply. The revision has never run, so the wait is its cold start;
-4. applies `infra/service` again, sending all traffic to that revision by name, if the first word came within the model's target: 60 seconds for Salamandra. Each revision is named after its service and the build that made it, `model-host-<build ID>`, so the name is known before the deploy and never read back from Cloud Run.
+3. sends that revision one message, with the key from Secret Manager, through `infra/service/scripts/try-revision.js`, asking for the model by the `--alias` its Dockerfile gives the server, and waits for the first word of the reply. The revision has never run, so the wait is its cold start;
+4. applies `infra/service` again, sending all traffic to that revision by name, if the first word came within the model's target: 60 seconds for Salamandra and 90 for ALIA, about three times their slowest measured cold starts, 20 and 30.5 seconds. ALIA's apply takes about 11 minutes more while Cloud Run imports its image. Each revision is named after its service and the build that made it, `model-host-<build ID>`, so the name is known before the deploy and never read back from Cloud Run.
 
 No reply, an error, or a first word after the target fails the deploy at step 3, and the revision serving before it goes on serving. Each pipeline's result shows on the commit in GitHub as a check named after its trigger, which links to the build's log.
 
@@ -189,7 +185,7 @@ Every deploy writes the cold start it measured to its build log as one line of J
 {"event":"cold_start","revision":"model-host-00002-abc","seconds":10.9,"passed":true}
 ```
 
-To read them across deploys:
+ALIA's revisions are named `model-host-alia-<build ID>`. To read them across deploys, both models' alike:
 
 ```bash
 gcloud logging read 'logName="projects/<project>/logs/cloudbuild" AND textPayload:"cold_start"' \
@@ -212,6 +208,8 @@ gcloud builds submit --config infra/service/cloudbuild.yaml \
   --gcs-source-staging-dir gs://<project>-model-weights/source
 ```
 
+For ALIA, the substitutions are `_MODEL=alia,_IMAGE_NAME=alia` for the build and `_MODEL=alia,_IMAGE_NAME=alia,_SERVICE=model-host-alia,_SECRET=model-host-alia-api-key,_WORKSPACE=alia,_TARGET_SECONDS=90` for the deploy.
+
 ### The service
 
 `infra/service` holds every setting of a model's Cloud Run service. What differs between models is in its `models`, chosen by the variable `model`, and each model's service has a Terraform state of its own, in a workspace named in `models`. An apply for one model in another's workspace is refused, since it would replace that model's service. Salamandra's service is `model-host` in `europe-west4`: one NVIDIA L4, 4 CPUs and 16 GiB of memory, billed while an instance is up, with its state in the `default` workspace. It scales between zero and one instance, so it costs nothing when idle and never more than one GPU, and it takes four requests at once. A startup probe on the server's `/health` keeps requests from an instance until the weights are loaded. Cloud Run lets anyone reach the service; the API key is the gate.
@@ -230,21 +228,16 @@ That keeps the latest revision as it is. A change to a setting needs a new revis
 
 An apply starts no instance, so it does not show whether the revision serves. The first request does that.
 
-ALIA's service is `model-host-alia`, with its state in the `alia` workspace: one NVIDIA RTX PRO 6000 with that GPU's minimum of 20 CPUs and 80 GiB, its key from `model-host-alia-api-key`, and otherwise the same scaling, concurrency and access as Salamandra's. Its startup probe allows 15 minutes for the 43 GB of weights to load, and a request is held for 900 seconds. Both are generous: its cold start was measured at 30.5 seconds on a revision's first instance and about 18 on later ones. Deploying a new image takes longer than Salamandra's, about 11 minutes, while Cloud Run imports its 43 GB layer, but that time is not in the cold start. Until ALIA has a deploy trigger of its own, it is deployed by hand, after its service image is built, with a revision named for the occasion:
+ALIA's service is `model-host-alia`, with its state in the `alia` workspace: one NVIDIA RTX PRO 6000 with that GPU's minimum of 20 CPUs and 80 GiB, its key from `model-host-alia-api-key`, and otherwise the same scaling, concurrency and access as Salamandra's. Its startup probe allows five minutes for the 43 GB of weights to load, which takes 13 to 25 seconds, and a request is held for 180 seconds, as long as the chat route holds it. Its cold start was measured at 30.5 seconds on a revision's first instance and about 18 on later ones. Deploying a new image takes longer than Salamandra's, about 11 minutes, while Cloud Run imports its 43 GB layer, but that time is not in the cold start. To apply it by hand, as for Salamandra but in its own workspace:
 
 ```bash
-tag=$(bash model/image-tag.sh alia)
-digest=$(gcloud artifacts docker images describe \
-  europe-west4-docker.pkg.dev/<project>/model-host/alia:$tag \
-  --format 'value(image_summary.digest)')
-terraform -chdir=infra/service init
-terraform -chdir=infra/service workspace select -or-create alia
+terraform -chdir=infra/service workspace select alia
 terraform -chdir=infra/service apply -var "model=alia" \
-  -var "image=europe-west4-docker.pkg.dev/<project>/model-host/alia@$digest" \
-  -var "revision=model-host-alia-$(date +%Y%m%d%H%M%S)"
+  -var "image=$(terraform -chdir=infra/service output -raw image)" \
+  -var "revision=$(terraform -chdir=infra/service output -raw revision)"
 ```
 
-Its first apply starts no instance, but it is the project's first service in the region with an RTX PRO 6000, which is when Cloud Run grants the GPUs. ALIA's settings are tested in its own workspace, apart from Salamandra's: see "Testing the Terraform".
+ALIA's settings are tested in its own workspace, apart from Salamandra's: see "Testing the Terraform".
 
 To point the app at the service, set `SALAMANDRA_HOST_URL` to `terraform -chdir=infra/service output -raw url` followed by `/v1`, and `SALAMANDRA_HOST_API_KEY` to the key.
 
@@ -275,6 +268,16 @@ Then, naming the revision to go back to, and keeping the latest revision's image
 ```bash
 terraform -chdir=infra/service workspace select default
 terraform -chdir=infra/service apply -var "model=salamandra" \
+  -var "image=$(terraform -chdir=infra/service output -raw image)" \
+  -var "revision=$(terraform -chdir=infra/service output -raw revision)" \
+  -var "serving_revision=<revision>"
+```
+
+For ALIA, list `--service model-host-alia`, and apply in its workspace:
+
+```bash
+terraform -chdir=infra/service workspace select alia
+terraform -chdir=infra/service apply -var "model=alia" \
   -var "image=$(terraform -chdir=infra/service output -raw image)" \
   -var "revision=$(terraform -chdir=infra/service output -raw revision)" \
   -var "serving_revision=<revision>"
