@@ -205,8 +205,10 @@ gcloud builds submit --config infra/service/cloudbuild.yaml \
   --project <project> --region europe-west4 \
   --substitutions _MODEL=salamandra,_IMAGE_NAME=service,_SERVICE=model-host,_SECRET=model-host-api-key,_WORKSPACE=default,_TARGET_SECONDS=60 \
   --service-account projects/<project>/serviceAccounts/model-host-deploy@<project>.iam.gserviceaccount.com \
-  --gcs-source-staging-dir gs://<project>-model-weights/source
+  --gcs-source-staging-dir gs://<project>-tfstate/source
 ```
+
+Each pipeline's source is staged in a bucket its own account can read: the weights bucket for the build, the state bucket for the deploy.
 
 For ALIA, the substitutions are `_MODEL=alia,_IMAGE_NAME=alia` for the build and `_MODEL=alia,_IMAGE_NAME=alia,_SERVICE=model-host-alia,_SECRET=model-host-alia-api-key,_WORKSPACE=alia,_TARGET_SECONDS=90` for the deploy.
 

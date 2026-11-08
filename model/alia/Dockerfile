@@ -19,7 +19,8 @@ FROM ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:20c6e722e2fcc5ca9c15401d3fd8e
 # The weights sit in a layer of their own, before anything that changes often,
 # so that a build which changes only the flags below can take the layer from
 # the image before it. model/cloudbuild.yaml sees to that with a cache; built
-# afresh, the layer gets a new digest and a deploy moves 43 GB.
+# afresh, the layer gets a new digest and a deploy moves 43 GB. Loading it
+# takes 13 to 25 seconds of a cold start.
 COPY --from=weights /models /models
 
 # The server runs as nobody, not as root, so that whoever takes control of it
