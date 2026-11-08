@@ -59,6 +59,12 @@ jobs:
       - run: terraform init -backend=false -input=false
       - run: terraform fmt -check -recursive
       - run: terraform test
+      # The service's tests for ALIA, in ALIA's workspace: the service refuses
+      # to plan a model in any other.
+      - if: matrix.configuration == 'infra/service'
+        run: terraform test -test-directory=tests/alia
+        env:
+          TF_WORKSPACE: alia
 
   dockerfile:
     runs-on: ubuntu-latest
