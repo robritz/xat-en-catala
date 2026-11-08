@@ -1,9 +1,15 @@
 // Sends the model host one message and yields the reply as it streams: each
 // piece of text as it arrives, as { words }, and the token counts that close
 // the stream, as { usage }. Stopping early, or aborting the signal, closes the
-// request.
+// request. The model is asked for by the name its host serves it under, its
+// server's --alias.
 
-export async function* streamReply(serviceUrl, key, signal) {
+export async function* streamReply(
+  serviceUrl,
+  key,
+  signal,
+  model = "BSC-LT/salamandra-7b-instruct-2606",
+) {
   const res = await fetch(
     `${serviceUrl.replace(/\/$/, "")}/v1/chat/completions`,
     {
@@ -13,7 +19,7 @@ export async function* streamReply(serviceUrl, key, signal) {
         Authorization: `Bearer ${key}`,
       },
       body: JSON.stringify({
-        model: "BSC-LT/salamandra-7b-instruct-2606",
+        model,
         messages: [{ role: "user", content: "Hola! Com estàs?" }],
         temperature: 1,
         top_p: 1,

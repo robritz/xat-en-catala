@@ -11,7 +11,7 @@ variable "region" {
 }
 
 variable "model" {
-  description = "The model whose host this is, one of local.models: salamandra."
+  description = "The model whose host this is, one of local.models: salamandra or alia."
   type        = string
 
   validation {

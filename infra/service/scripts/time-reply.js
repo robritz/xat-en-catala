@@ -1,18 +1,21 @@
 // Sends the model host one message and times the reply, to measure a cold
 // start: run it when the service has no instance.
 //
-//   MODEL_HOST_API_KEY=<key> node infra/service/scripts/time-reply.js <service URL>
+//   MODEL_HOST_API_KEY=<key> node infra/service/scripts/time-reply.js <service URL> [served name]
+//
+// The served name is the model's, its server's --alias. Left out, it is
+// Salamandra's.
 //
 // It prints one line of JSON: the seconds until the first word of the reply
 // and until its end, the token counts that close the stream, and the reply.
 
 import { streamReply } from "./reply-stream.js";
 
-const [serviceUrl] = process.argv.slice(2);
+const [serviceUrl, servedName] = process.argv.slice(2);
 const key = process.env.MODEL_HOST_API_KEY;
 if (!serviceUrl || !key) {
   console.error(
-    "Usage: MODEL_HOST_API_KEY=<key> node infra/service/scripts/time-reply.js <service URL>",
+    "Usage: MODEL_HOST_API_KEY=<key> node infra/service/scripts/time-reply.js <service URL> [served name]",
   );
   process.exit(1);
 }
@@ -24,7 +27,7 @@ const secondsSinceSent = () =>
 let reply = "";
 let firstWordSeconds = null;
 let usage = null;
-for await (const piece of streamReply(serviceUrl, key)) {
+for await (const piece of streamReply(serviceUrl, key, undefined, servedName)) {
   if (piece.words) {
     firstWordSeconds ??= secondsSinceSent();
     reply += piece.words;
