@@ -230,7 +230,7 @@ That keeps the latest revision as it is. A change to a setting needs a new revis
 
 An apply starts no instance, so it does not show whether the revision serves. The first request does that.
 
-ALIA's service is `model-host-alia`, with its state in the `alia` workspace: one NVIDIA RTX PRO 6000 with that GPU's minimum of 20 CPUs and 80 GiB, its key from `model-host-alia-api-key`, and otherwise the same scaling, concurrency and access as Salamandra's. Its startup probe allows 15 minutes for the 43 GB of weights to load, and a request is held for 900 seconds. Until ALIA has a deploy trigger of its own, it is deployed by hand, after its service image is built, with a revision named for the occasion:
+ALIA's service is `model-host-alia`, with its state in the `alia` workspace: one NVIDIA RTX PRO 6000 with that GPU's minimum of 20 CPUs and 80 GiB, its key from `model-host-alia-api-key`, and otherwise the same scaling, concurrency and access as Salamandra's. Its startup probe allows 15 minutes for the 43 GB of weights to load, and a request is held for 900 seconds. Both are generous: its cold start was measured at 30.5 seconds on a revision's first instance and about 18 on later ones. Deploying a new image takes longer than Salamandra's, about 11 minutes, while Cloud Run imports its 43 GB layer, but that time is not in the cold start. Until ALIA has a deploy trigger of its own, it is deployed by hand, after its service image is built, with a revision named for the occasion:
 
 ```bash
 tag=$(bash model/image-tag.sh alia)
