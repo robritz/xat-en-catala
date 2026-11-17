@@ -7,7 +7,9 @@ const DEFAULT_API_URL = "http://localhost:8000";
 export const MAX_SPEECH_LENGTH = 2000;
 
 // An API that takes longer than this to report its health isn't healthy.
-const HEALTH_TIMEOUT_MS = 5000;
+// Long enough to wait out a cold start, which takes about 40 seconds when
+// the API has scaled to zero.
+const HEALTH_TIMEOUT_MS = 60_000;
 
 const VOICE_SETTINGS = {
   voice: "grau",
