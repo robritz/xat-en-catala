@@ -79,6 +79,10 @@ async function speechURL(text: string): Promise<string> {
   return URL.createObjectURL(await res.blob());
 }
 
+// How long to wait before asking again whether replies can be spoken, after
+// being told they can't.
+const SPEECH_RECHECK_MS = 15_000;
+
 // Asks whether replies can be spoken. Any failure to find out counts as no.
 async function isSpeechHealthy(): Promise<boolean> {
   try {
@@ -247,14 +251,20 @@ export default function Chat({ initiallyUnlocked }: { initiallyUnlocked: boolean
   useEffect(() => {
     if (!unlocked) return;
     let current = true;
-    isSpeechHealthy().then((healthy) => {
-      if (!current) return;
-      setSpeechAvailable(healthy);
-      // An offer opened in the meantime may be left with nothing to offer.
-      if (!healthy) setOffer(null);
-    });
+    let recheck: ReturnType<typeof setTimeout> | undefined;
+    const check = () =>
+      isSpeechHealthy().then((healthy) => {
+        if (!current) return;
+        setSpeechAvailable(healthy);
+        // An offer opened in the meantime may be left with nothing to offer.
+        if (!healthy) setOffer(null);
+        // The TTS API may only be slow to wake, so ask again until it answers.
+        if (!healthy) recheck = setTimeout(check, SPEECH_RECHECK_MS);
+      });
+    check();
     return () => {
       current = false;
+      clearTimeout(recheck);
     };
   }, [unlocked]);
 

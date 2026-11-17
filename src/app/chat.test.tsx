@@ -1650,6 +1650,38 @@ describe("speech that isn't available", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("/api/speak/health");
   });
 
+  test("offers to speak a reply once a later health check succeeds", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      health = new Response("Unavailable", { status: 503 });
+      await renderStarted();
+      await send("Hello");
+      tap("Bon dia!");
+      expect(screen.queryByRole("button", { name: LISTEN_BUTTON })).toBeNull();
+      tap("Bon dia!");
+
+      health = new Response("OK");
+      await act(() => vi.advanceTimersByTimeAsync(15_000));
+      tap("Bon dia!");
+
+      expect(screen.getByRole("button", { name: LISTEN_BUTTON })).toBeDefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("stops checking the health once it succeeds", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      await renderStarted();
+      await act(() => vi.advanceTimersByTimeAsync(60_000));
+
+      expect(fetchMock.mock.calls.filter(([url]) => url === "/api/speak/health")).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("checks the health once the chat is unlocked, not while it is locked", async () => {
     health = new Response("Unavailable", { status: 503 });
     render(<Chat initiallyUnlocked={false} />);
